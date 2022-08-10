@@ -26,6 +26,9 @@ import { pki } from "node-forge";
 import { FHttpRequestCancellationToken } from "./FHttpRequestCancellationToken";
 import { FHostingConfiguration } from "./FHostingConfiguration";
 
+export { FHostingConfiguration } from "./FHostingConfiguration";
+export { FHttpRequestCancellationToken } from "./FHttpRequestCancellationToken";
+
 export type WebServerRequestHandler = http.RequestListener;
 
 export interface WebServer extends FInitableBase {
