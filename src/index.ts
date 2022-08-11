@@ -28,7 +28,9 @@ import { FHostingConfiguration } from "./FHostingConfiguration";
 
 export { FHostingConfiguration } from "./FHostingConfiguration";
 export { FHttpRequestCancellationToken } from "./FHttpRequestCancellationToken";
+
 export * from "./configuration";
+export * from "./launcher";
 
 export type WebServerRequestHandler = http.RequestListener;
 
