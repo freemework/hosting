@@ -1,6 +1,6 @@
 {
 	"name": "@freemework/hosting",
-	"version": "0.4.6",
+	"version": "0.4.16",
 	"description": "Hosting library of the Freemework Project.",
 	"author": {
 		"name": "Freemework Project",
@@ -38,13 +38,14 @@
 		"clean": "find src \\( -name '*.js' -o -name '*.d.ts' -o -name '*.map' \\) -exec rm {} \\; ; find test \\( -name '*.js' -o -name '*.d.ts' -o -name '*.map' \\) -exec rm {} \\;",
 		"build": "tsc",
 		"build:package": "rm -rf lib && tsc --project tsconfig-package.json && cp README.md .dist/ && jq '{ name: .name, version: .version, description: .description, author: .author, contributors: .contributors, license: .license, keywords: .keywords, repository: .repository, bugs: .bugs, engines: .engines, homepage: .homepage, main: \"lib/index.js\", types: \"lib/index.d.ts\", dependencies: .dependencies }' package.json > .dist/package.json",
-		"test": "tsc && nyc --exclude submodules --exclude test --extension=\".ts\" --reporter=lcov --reporter=text --reporter=text-summary mocha \"test/**/*.test.js\" --recursive --timeout 10000",
+		"test": "tsc && nyc --exclude submodules --exclude test --extension=\".ts\" --reporter=lcov --reporter=text --reporter=text-summary mocha --require source-map-support/register --recursive --timeout 10000 \"test/**/*.test.js\"",
 		"test:only": "tsc && mocha --require source-map-support/register \"test/**/*.test.js\" --recursive --timeout 10000"
 	},
 	"dependencies": {
-		"@freemework/common": "^0.4.7",
+		"@iarna/toml": "^2.2.5",
+		"@freemework/common": "^0.4.16",
 		"@types/express": "^4.17.7",
-		"@types/node": "^11.15.20",
+		"@types/node": "^18.0.0",
 		"@types/node-forge": "^0.9.5",
 		"@types/ws": "^7.2.6",
 		"express": "^4.17.1",
@@ -56,11 +57,12 @@
 		"@types/chai": "^4.3.1",
 		"@types/lodash": "^4.14.182",
 		"@types/mocha": "^9.1.1",
-		"@types/node": "^18.0.0",
+		"@types/tmp": "^0.1.0",
 		"chai": "^4.3.6",
 		"mocha": "^10.0.0",
 		"nyc": "^15.1.0",
 		"source-map-support": "^0.5.21",
+		"tmp": "^0.1.0",
 		"typescript": "^4.7.4"
 	}
 }
