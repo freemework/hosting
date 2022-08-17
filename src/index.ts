@@ -115,13 +115,10 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 	 * Lazy create for Express Application
 	 */
 	public get rootExpressApplication(): express.Application {
-		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
-
 		if (this._rootExpressApplication === null) {
 			this._rootExpressApplication = express();
 			const trustProxy = this._opts.trustProxy;
 			if (trustProxy !== undefined) {
-				logger.debug(`Setup 'trust proxy': ${trustProxy}`);
 				this._rootExpressApplication.set("trust proxy", trustProxy);
 			}
 		}
