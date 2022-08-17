@@ -18,7 +18,7 @@ import {
 	secretsDirectoryConfiguration
 } from "../configuration";
 
-export function Flauncher(runtimeFactory: Flauncher.ConfigLessRuntimeFactory): void;
+export function Flauncher(runtimeFactory: FConfigLessRuntimeFactory): void;
 
 /**
  * Launch an application using `defaultConfigurationLoader`
@@ -26,8 +26,8 @@ export function Flauncher(runtimeFactory: Flauncher.ConfigLessRuntimeFactory): v
  * @param runtimeFactory User's function that compose and start runtime
  */
 export function Flauncher<TConfiguration>(
-	configurationParser: Flauncher.ConfigurationParser<TConfiguration>,
-	runtimeFactory: Flauncher.FLauncherRuntimeFactory<TConfiguration>
+	configurationParser: ConfigurationParser<TConfiguration>,
+	runtimeFactory: FLauncherRuntimeFactory<TConfiguration>
 ): void;
 
 /**
@@ -37,9 +37,9 @@ export function Flauncher<TConfiguration>(
  * @param runtimeFactory User's function that compose and start runtime
  */
 export function Flauncher<TConfiguration>(
-	configurationLoader: Flauncher.RawConfigurationLoader,
-	configurationParser: Flauncher.ConfigurationParser<TConfiguration>,
-	runtimeFactory: Flauncher.FLauncherRuntimeFactory<TConfiguration>
+	configurationLoader: RawConfigurationLoader,
+	configurationParser: ConfigurationParser<TConfiguration>,
+	runtimeFactory: FLauncherRuntimeFactory<TConfiguration>
 ): void;
 
 export function Flauncher<TConfiguration>(...args: Array<any>): void {
@@ -70,11 +70,11 @@ export function Flauncher<TConfiguration>(...args: Array<any>): void {
 
 		let runtimeStuff:
 			{
-				readonly loader: Flauncher.RawConfigurationLoader;
-				readonly parser: Flauncher.ConfigurationParser<TConfiguration>;
-				readonly runtimeFactory: Flauncher.FLauncherRuntimeFactory<TConfiguration>
+				readonly loader: RawConfigurationLoader;
+				readonly parser: ConfigurationParser<TConfiguration>;
+				readonly runtimeFactory: FLauncherRuntimeFactory<TConfiguration>
 			}
-			| { readonly parser: null; readonly runtimeFactory: Flauncher.ConfigLessRuntimeFactory };
+			| { readonly parser: null; readonly runtimeFactory: FConfigLessRuntimeFactory };
 
 		if (args.length === 3 && typeof args[0] === "function" && typeof args[1] === "function") {
 			runtimeStuff = Object.freeze({
@@ -92,7 +92,7 @@ export function Flauncher<TConfiguration>(...args: Array<any>): void {
 			throw new Error("Wrong arguments");
 		}
 
-		let runtime: Flauncher.FLauncherRuntime;
+		let runtime: FLauncherRuntime;
 		try {
 			if (runtimeStuff.parser === null) {
 				runtime = await runtimeStuff.runtimeFactory(executionContext);
@@ -174,18 +174,15 @@ export function Flauncher<TConfiguration>(...args: Array<any>): void {
 		});
 }
 
-export namespace Flauncher {
-	export interface FLauncherRuntime {
-		destroy(): Promise<void>;
-	}
-	
-	export type RawConfigurationLoader = (executionContext: FExecutionContext) => Promise<FConfiguration>;
-	export type ConfigurationParser<TConfiguration> = (rawConfiguration: FConfiguration) => TConfiguration;
-	
-	export type FLauncherRuntimeFactory<TConfiguration> = (executionContext: FExecutionContext, configuration: TConfiguration) => Promise<FLauncherRuntime>;
-	export type ConfigLessRuntimeFactory = (executionContext: FExecutionContext) => Promise<FLauncherRuntime>;
-	
+export interface FLauncherRuntime {
+	destroy(): Promise<void>;
 }
+
+export type RawConfigurationLoader = (executionContext: FExecutionContext) => Promise<FConfiguration>;
+export type ConfigurationParser<TConfiguration> = (rawConfiguration: FConfiguration) => TConfiguration;
+
+export type FLauncherRuntimeFactory<TConfiguration> = (executionContext: FExecutionContext, configuration: TConfiguration) => Promise<FLauncherRuntime>;
+export type FConfigLessRuntimeFactory = (executionContext: FExecutionContext) => Promise<FLauncherRuntime>;
 
 export async function defaultConfigurationLoader(executionContext: FExecutionContext): Promise<FConfiguration> {
 	const chainItems: Array<FConfiguration> = [];

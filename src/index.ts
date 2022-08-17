@@ -52,7 +52,6 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 	private readonly _onRequestImpl: http.RequestListener;
 	private readonly _handlers: Map</*bindPath: */string, FWebServerRequestHandler>;
 	private readonly _caCertificates: ReadonlyArray<[pki.Certificate, Buffer]>;
-	private _initExecutionContext: FExecutionContext | null;
 	private _rootExpressApplication: express.Application | null;
 
 	public static createFCancellationToken(request: http.IncomingMessage): FCancellationToken {
@@ -65,8 +64,6 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 		this._websockets = {};
 		this._handlers = new Map();
 		this._rootExpressApplication = null;
-		this._initExecutionContext = null;
-
 
 		let onXfccRequest: http.RequestListener | null = null;
 		let onXfccUpgrade: ((request: http.IncomingMessage, socket: net.Socket, head: Buffer) => void) | null = null;
@@ -177,7 +174,6 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 	protected async onInit(executionContext: FExecutionContext): Promise<void> {
 		this.underlayingServer.on("upgrade", this._onUpgrade);
 		await this.onListen();
-		this._initExecutionContext = executionContext;
 	}
 
 	protected get caCertificatesAsPki(): Array<pki.Certificate> {
@@ -198,11 +194,6 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 
 	protected onRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
 		this._onRequestImpl(req, res);
-	}
-
-	protected get initExecutionContext(): FExecutionContext {
-		this.verifyInitialized();
-		return this._initExecutionContext!;
 	}
 
 	private onRequestCommon(req: http.IncomingMessage, res: http.ServerResponse): void {
@@ -468,23 +459,16 @@ export class SecuredWebServer extends FAbstractWebServer<FHostingConfiguration.S
 
 export abstract class FBindEndpoint extends FInitableBase {
 	protected readonly _bindPath: string;
-	private _initExecutionContext: FExecutionContext | null;
 
 	public constructor(
 		opts: FHostingConfiguration.BindEndpoint
 	) {
 		super();
 		this._bindPath = opts.bindPath;
-		this._initExecutionContext = null;
-	}
-
-	protected get initExecutionContext(): FExecutionContext {
-		this.verifyInitialized();
-		return this._initExecutionContext!;
 	}
 
 	protected onInit(executionContext: FExecutionContext): void {
-		this._initExecutionContext = executionContext;
+		// NOP
 	}
 }
 
