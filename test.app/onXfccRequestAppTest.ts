@@ -162,7 +162,7 @@ class TimerSubsciberChannel extends FDisposableBase implements FSubscriberChanne
 
 const subscriptionChannel = new TimerSubsciberChannel(250);
 
-class MyRestEndpoint extends THE.ServersBindEndpoint {
+class MyRestEndpoint extends THE.FServersBindEndpoint {
 	protected onInit(): void {
 		this._servers.map(server => {
 			server.bindRequestHandler("/", this._helloWorldHandler.bind(this));
@@ -287,7 +287,7 @@ async function main() {
 		listenHost: "0.0.0.0",
 		listenPort: 8443,
 		name: "onXfccRequestAppTest Secured"
-	}, FLogger.Console.getLogger("Secured Server"));
+	});
 
 	server2 = new THE.UnsecuredWebServer({
 		// caCertificates: [Buffer.from(caCertificate1), Buffer.from(caCertificate2)],
@@ -296,14 +296,13 @@ async function main() {
 		listenHost: "0.0.0.0",
 		listenPort: 8440,
 		name: "onXfccRequestAppTest Unsecured"
-	}, FLogger.Console.getLogger("Unsecured Server"));
+	});
 
 	const restEndpoint = new MyRestEndpoint(
 		[server1, server2],
 		{
 			bindPath: "/"
-		},
-		FLogger.Console.getLogger("restEndpoint")
+		}
 	);
 
 	// const wsEndpoint = new THE.WebSocketAdapterEndpoint(

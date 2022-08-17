@@ -4,7 +4,7 @@ import * as WebSocket from "ws";
 
 import * as THE from "../src/index";
 
-class BinaryEchoChannel extends FDisposableBase implements THE.WebSocketChannelSupplyEndpoint.BinaryChannel {
+class BinaryEchoChannel extends FDisposableBase implements THE.FWebSocketChannelSupplyEndpoint.BinaryChannel {
 	private readonly _timeout: number;
 	private readonly _handlers: Set<FSubscriberChannel.Callback<Uint8Array>>;
 	private readonly _subProtocol: string;
@@ -66,7 +66,7 @@ class BinaryEchoChannel extends FDisposableBase implements THE.WebSocketChannelS
 		}));
 	}
 }
-class TextEchoChannel extends FDisposableBase implements THE.WebSocketChannelSupplyEndpoint.TextChannel {
+class TextEchoChannel extends FDisposableBase implements THE.FWebSocketChannelSupplyEndpoint.TextChannel {
 	private readonly _timeout: number;
 	private readonly _handlers: Set<FSubscriberChannel.Callback<string>>;
 	private readonly _subProtocol: string;
@@ -150,7 +150,7 @@ async function main() {
 		listenHost: "0.0.0.0",
 		listenPort: 8080,
 		name: "Unsecured Server"
-	}, FLogger.Console.getLogger("Unsecured Server"));
+	});
 
 	const wsEndpoint = new TestWebSocketChannelsEndpoint(
 		[server],
@@ -158,8 +158,7 @@ async function main() {
 			bindPath: "/ws",
 			defaultProtocol: "text",
 			allowedProtocols: ["bin" /*, "text" - will be included automatically*/]
-		},
-		FLogger.Console.getLogger("wsEndpoint")
+		}
 	);
 
 	await wsEndpoint.init(FExecutionContext.Empty);

@@ -1,4 +1,4 @@
-import { FAssertModuleVersion, FExecutionContext, FPublisherChannel, FSubscriberChannel } from "@freemework/common";
+import { FAssertModuleVersion, FExecutionContext, FExecutionContextLogger, FPublisherChannel, FSubscriberChannel } from "@freemework/common";
 FAssertModuleVersion(require("../package.json"));
 
 import {
@@ -32,40 +32,40 @@ export { FHttpRequestCancellationToken } from "./FHttpRequestCancellationToken";
 export * from "./configuration";
 export * from "./launcher";
 
-export type WebServerRequestHandler = http.RequestListener;
+export type FWebServerRequestHandler = http.RequestListener;
 
-export interface WebServer extends FInitableBase {
+export interface FWebServer extends FInitableBase {
 	readonly name: string;
 	readonly underlayingServer: http.Server | https.Server;
 	rootExpressApplication: express.Application;
-	bindRequestHandler(bindPath: string, handler: WebServerRequestHandler): void;
+	bindRequestHandler(bindPath: string, handler: FWebServerRequestHandler): void;
 	createWebSocketServer(bindPath: string): WebSocket.Server;
 	destroyWebSocketServer(bindPath: string): Promise<void>;
 }
 
-export abstract class AbstractWebServer<TOpts extends FHostingConfiguration.WebServerBase | FHostingConfiguration.WebServer>
-	extends FInitableBase implements WebServer {
+export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.WebServerBase | FHostingConfiguration.WebServer>
+	extends FInitableBase implements FWebServer {
 	public abstract readonly underlayingServer: http.Server | https.Server;
-	protected readonly _log: FLogger;
 	protected readonly _opts: TOpts;
 	protected readonly _websockets: { [bindPath: string]: WebSocket.Server };
 	private readonly _onUpgrade: (request: http.IncomingMessage, socket: net.Socket, head: Buffer) => void;
 	private readonly _onRequestImpl: http.RequestListener;
-	private readonly _handlers: Map</*bindPath: */string, WebServerRequestHandler>;
+	private readonly _handlers: Map</*bindPath: */string, FWebServerRequestHandler>;
 	private readonly _caCertificates: ReadonlyArray<[pki.Certificate, Buffer]>;
+	private _initExecutionContext: FExecutionContext | null;
 	private _rootExpressApplication: express.Application | null;
 
 	public static createFCancellationToken(request: http.IncomingMessage): FCancellationToken {
 		return new FHttpRequestCancellationToken(request);
 	}
 
-	public constructor(opts: TOpts, log: FLogger) {
+	public constructor(opts: TOpts) {
 		super();
 		this._opts = opts;
-		this._log = log;
 		this._websockets = {};
 		this._handlers = new Map();
 		this._rootExpressApplication = null;
+		this._initExecutionContext = null;
 
 
 		let onXfccRequest: http.RequestListener | null = null;
@@ -118,11 +118,13 @@ export abstract class AbstractWebServer<TOpts extends FHostingConfiguration.WebS
 	 * Lazy create for Express Application
 	 */
 	public get rootExpressApplication(): express.Application {
+		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+
 		if (this._rootExpressApplication === null) {
 			this._rootExpressApplication = express();
 			const trustProxy = this._opts.trustProxy;
 			if (trustProxy !== undefined) {
-				this._log.debug(`Setup 'trust proxy': ${trustProxy}`);
+				logger.debug(`Setup 'trust proxy': ${trustProxy}`);
 				this._rootExpressApplication.set("trust proxy", trustProxy);
 			}
 		}
@@ -138,7 +140,7 @@ export abstract class AbstractWebServer<TOpts extends FHostingConfiguration.WebS
 
 	public get name(): string { return this._opts.name; }
 
-	public bindRequestHandler(bindPath: string, value: WebServerRequestHandler): void {
+	public bindRequestHandler(bindPath: string, value: FWebServerRequestHandler): void {
 		if (this._handlers.has(bindPath)) {
 			throw new Error(`Wrong operation. Path '${bindPath}' already binded`);
 		}
@@ -151,16 +153,18 @@ export abstract class AbstractWebServer<TOpts extends FHostingConfiguration.WebS
 		return websocketServer;
 	}
 	public async destroyWebSocketServer(bindPath: string): Promise<void> {
+		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+
 		const webSocketServer = this._websockets[bindPath];
 		if (webSocketServer !== undefined) {
 			delete this._websockets[bindPath];
 			await new Promise<void>((resolve) => {
 				webSocketServer.close((err) => {
 					if (err !== undefined) {
-						if (this._log.isWarnEnabled) {
-							this._log.warn(`Web Socket Server was closed with error. Inner message: ${err.message} `);
+						if (logger.isWarnEnabled) {
+							logger.warn(`Web Socket Server was closed with error. Inner message: ${err.message} `);
 						}
-						this._log.trace("Web Socket Server was closed with error.", FException.wrapIfNeeded(err));
+						logger.trace("Web Socket Server was closed with error.", FException.wrapIfNeeded(err));
 					}
 
 					// dispose never raise any errors
@@ -170,9 +174,10 @@ export abstract class AbstractWebServer<TOpts extends FHostingConfiguration.WebS
 		}
 	}
 
-	protected onInit(): Promise<void> {
+	protected async onInit(executionContext: FExecutionContext): Promise<void> {
 		this.underlayingServer.on("upgrade", this._onUpgrade);
-		return this.onListen();
+		await this.onListen();
+		this._initExecutionContext = executionContext;
 	}
 
 	protected get caCertificatesAsPki(): Array<pki.Certificate> {
@@ -195,13 +200,20 @@ export abstract class AbstractWebServer<TOpts extends FHostingConfiguration.WebS
 		this._onRequestImpl(req, res);
 	}
 
+	protected get initExecutionContext(): FExecutionContext {
+		this.verifyInitialized();
+		return this._initExecutionContext!;
+	}
+
 	private onRequestCommon(req: http.IncomingMessage, res: http.ServerResponse): void {
+		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+
 		if (this._handlers.size > 0 && req.url !== undefined) {
 			const { pathname } = new URL(req.url);
 			if (pathname !== undefined) {
 				for (const bindPath of this._handlers.keys()) {
 					if (pathname.startsWith(bindPath)) {
-						const handler = this._handlers.get(bindPath) as WebServerRequestHandler;
+						const handler = this._handlers.get(bindPath) as FWebServerRequestHandler;
 						handler(req, res);
 						return;
 					}
@@ -215,7 +227,7 @@ export abstract class AbstractWebServer<TOpts extends FHostingConfiguration.WebS
 			return;
 		}
 
-		this._log.warn("Request was handled but no listener.");
+		logger.warn("Request was handled but no listener.");
 		res.writeHead(503);
 		res.statusMessage = "Service Unavailable";
 		res.end();
@@ -233,11 +245,13 @@ export abstract class AbstractWebServer<TOpts extends FHostingConfiguration.WebS
 	}
 
 	private onUpgradeCommon(req: http.IncomingMessage, socket: net.Socket, head: Buffer): void {
+		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+
 		const urlPath = req.url;
 		if (urlPath !== undefined) {
 			const wss = this._websockets[urlPath];
 			if (wss !== undefined) {
-				this._log.debug(`Upgrade the server on url path '${urlPath}' for WebSocket server.`);
+				logger.debug(`Upgrade the server on url path '${urlPath}' for WebSocket server.`);
 				wss.handleUpgrade(req, socket, head, function (ws) {
 					wss.emit("connection", ws, req);
 				});
@@ -260,9 +274,11 @@ export abstract class AbstractWebServer<TOpts extends FHostingConfiguration.WebS
 	}
 
 	private validateXFCC(req: http.IncomingMessage): boolean {
+		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+
 		const xfccHeaderData = req && req.headers && req.headers["x-forwarded-client-cert"];
 		if (_.isString(xfccHeaderData)) {
-			this._log.trace(`X-Forwarded-Client-Cert header: ${xfccHeaderData}`);
+			logger.trace(`X-Forwarded-Client-Cert header: ${xfccHeaderData}`);
 
 			const clientCertPem = urlDecode(xfccHeaderData);
 			const clientCert = pki.certificateFromPem(clientCertPem);
@@ -273,22 +289,22 @@ export abstract class AbstractWebServer<TOpts extends FHostingConfiguration.WebS
 						return true;
 					}
 				} catch (e) {
-					this._log.trace("Verify failed.", FException.wrapIfNeeded(e));
+					logger.trace("Verify failed.", FException.wrapIfNeeded(e));
 				}
 			}
 		} else {
-			this._log.debug("Request with no X-Forwarded-Client-Cert header.");
+			logger.debug("Request with no X-Forwarded-Client-Cert header.");
 		}
 
 		return false;
 	}
 }
 
-export class UnsecuredWebServer extends AbstractWebServer<FHostingConfiguration.UnsecuredWebServer> {
+export class UnsecuredWebServer extends FAbstractWebServer<FHostingConfiguration.UnsecuredWebServer> {
 	private readonly _httpServer: http.Server;
 
-	public constructor(opts: FHostingConfiguration.UnsecuredWebServer, log: FLogger) {
-		super(opts, log);
+	public constructor(opts: FHostingConfiguration.UnsecuredWebServer) {
+		super(opts);
 
 		// Make HTTP server instance
 		const serverOpts: https.ServerOptions = {
@@ -300,19 +316,21 @@ export class UnsecuredWebServer extends AbstractWebServer<FHostingConfiguration.
 	public get underlayingServer(): http.Server { return this._httpServer; }
 
 	protected onListen(): Promise<void> {
-		this._log.debug("UnsecuredWebServer#listen()");
+		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+
+		logger.debug("UnsecuredWebServer#listen()");
 		const opts: FHostingConfiguration.UnsecuredWebServer = this._opts;
 		const server: http.Server = this._httpServer;
 		return new Promise<void>((resolve, reject) => {
-			this._log.info("Starting Web Server...");
+			logger.info("Starting Web Server...");
 			server
 				.on("listening", () => {
 					const address = server.address();
 					if (address !== null) {
 						if (typeof address === "string") {
-							this._log.info(`Web Server was started on ${address}`);
+							logger.info(`Web Server was started on ${address}`);
 						} else {
-							this._log.info(address.family + " Web Server was started on http://" + address.address + ":" + address.port);
+							logger.info(address.family + " Web Server was started on http://" + address.address + ":" + address.port);
 						}
 					}
 					resolve();
@@ -323,26 +341,27 @@ export class UnsecuredWebServer extends AbstractWebServer<FHostingConfiguration.
 	}
 
 	protected async onDispose() {
-		this._log.debug("UnsecuredWebServer#onDispose()");
+		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		logger.debug("UnsecuredWebServer#onDispose()");
 		const server = this._httpServer;
 		const address = server.address();
 		if (address !== null) {
 			if (typeof address === "string") {
-				this._log.info("Stoping Web Server http://" + address + "...");
+				logger.info("Stoping Web Server http://" + address + "...");
 			} else {
-				this._log.info("Stoping " + address.family + " Web Server http://" + address.address + ":" + address.port + "...");
+				logger.info("Stoping " + address.family + " Web Server http://" + address.address + ":" + address.port + "...");
 			}
 		} else {
-			this._log.info("Stoping Web Server...");
+			logger.info("Stoping Web Server...");
 		}
 		await new Promise<void>((destroyResolve) => {
 			server.close((e) => {
 				if (e) {
 					const ex: FException = FException.wrapIfNeeded(e);
-					this._log.warn(`The Web Server was stopped with error: ${ex.message}`);
-					this._log.debug("The Web Server was stopped with error", ex);
+					logger.warn(`The Web Server was stopped with error: ${ex.message}`);
+					logger.debug("The Web Server was stopped with error", ex);
 				} else {
-					this._log.info("The Web Server was stopped");
+					logger.info("The Web Server was stopped");
 				}
 				destroyResolve();
 			});
@@ -350,11 +369,11 @@ export class UnsecuredWebServer extends AbstractWebServer<FHostingConfiguration.
 	}
 }
 
-export class SecuredWebServer extends AbstractWebServer<FHostingConfiguration.SecuredWebServer> {
+export class SecuredWebServer extends FAbstractWebServer<FHostingConfiguration.SecuredWebServer> {
 	private readonly _httpsServer: https.Server;
 
-	public constructor(opts: FHostingConfiguration.SecuredWebServer, log: FLogger) {
-		super(opts, log);
+	public constructor(opts: FHostingConfiguration.SecuredWebServer) {
+		super(opts);
 
 		// Make HTTPS server instance
 		const serverOpts: https.ServerOptions = {
@@ -395,19 +414,20 @@ export class SecuredWebServer extends AbstractWebServer<FHostingConfiguration.Se
 	public get underlayingServer(): https.Server { return this._httpsServer; }
 
 	protected onListen(): Promise<void> {
-		this._log.debug("SecuredWebServer#listen()");
+		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		logger.debug("SecuredWebServer#listen()");
 		const opts: FHostingConfiguration.SecuredWebServer = this._opts;
 		const server: https.Server = this._httpsServer;
 		return new Promise((resolve, reject) => {
-			this._log.info("Starting Web Server...");
+			logger.info("Starting Web Server...");
 			server
 				.on("listening", () => {
 					const address = server.address();
 					if (address !== null) {
 						if (typeof address === "string") {
-							this._log.info(`Web Server was started on ${address}`);
+							logger.info(`Web Server was started on ${address}`);
 						} else {
-							this._log.info(address.family + " Web Server was started on https://" + address.address + ":" + address.port);
+							logger.info(address.family + " Web Server was started on https://" + address.address + ":" + address.port);
 						}
 					}
 					resolve();
@@ -418,26 +438,27 @@ export class SecuredWebServer extends AbstractWebServer<FHostingConfiguration.Se
 	}
 
 	protected async onDispose() {
-		this._log.debug("SecuredWebServer#onDispose()");
+		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		logger.debug("SecuredWebServer#onDispose()");
 		const server = this._httpsServer;
 		const address = server.address();
 		if (address !== null) {
 			if (typeof address === "string") {
-				this._log.info("Stoping Web Server https://" + address + "...");
+				logger.info("Stoping Web Server https://" + address + "...");
 			} else {
-				this._log.info("Stoping " + address.family + " Web Server https://" + address.address + ":" + address.port + "...");
+				logger.info("Stoping " + address.family + " Web Server https://" + address.address + ":" + address.port + "...");
 			}
 		} else {
-			this._log.info("Stoping Web Server...");
+			logger.info("Stoping Web Server...");
 		}
 		await new Promise<void>((destroyResolve) => {
 			server.close((e) => {
 				if (e) {
 					const ex: FException = FException.wrapIfNeeded(e);
-					this._log.warn(`The Web Server was stopped with error: ${ex.message}`);
-					this._log.debug("The Web Server was stopped with error", ex);
+					logger.warn(`The Web Server was stopped with error: ${ex.message}`);
+					logger.debug("The Web Server was stopped with error", ex);
 				} else {
-					this._log.info("The Web Server was stopped");
+					logger.info("The Web Server was stopped");
 				}
 				destroyResolve();
 			});
@@ -445,29 +466,36 @@ export class SecuredWebServer extends AbstractWebServer<FHostingConfiguration.Se
 	}
 }
 
-export abstract class BindEndpoint extends FInitableBase {
-	protected readonly _log: FLogger;
+export abstract class FBindEndpoint extends FInitableBase {
 	protected readonly _bindPath: string;
+	private _initExecutionContext: FExecutionContext | null;
 
 	public constructor(
-		opts: FHostingConfiguration.BindEndpoint,
-		log: FLogger
+		opts: FHostingConfiguration.BindEndpoint
 	) {
 		super();
-		this._log = log;
 		this._bindPath = opts.bindPath;
+		this._initExecutionContext = null;
+	}
+
+	protected get initExecutionContext(): FExecutionContext {
+		this.verifyInitialized();
+		return this._initExecutionContext!;
+	}
+
+	protected onInit(executionContext: FExecutionContext): void {
+		this._initExecutionContext = executionContext;
 	}
 }
 
-export abstract class ServersBindEndpoint extends BindEndpoint {
-	protected readonly _servers: ReadonlyArray<WebServer>;
+export abstract class FServersBindEndpoint extends FBindEndpoint {
+	protected readonly _servers: ReadonlyArray<FWebServer>;
 
 	public constructor(
-		servers: ReadonlyArray<WebServer>,
-		opts: FHostingConfiguration.BindEndpoint,
-		log: FLogger
+		servers: ReadonlyArray<FWebServer>,
+		opts: FHostingConfiguration.BindEndpoint
 	) {
-		super(opts, log);
+		super(opts);
 		this._servers = servers;
 	}
 }
@@ -483,7 +511,7 @@ export abstract class ServersBindEndpoint extends BindEndpoint {
  *
  * You need to override onOpenBinaryChannel and/or onOpenTextChannel to obtain necessary channel
  */
-export class WebSocketChannelSupplyEndpoint extends ServersBindEndpoint {
+export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 	private readonly _webSocketServers: Array<WebSocket.Server>;
 	private readonly _connections: Set<WebSocket>;
 	private _defaultProtocol: string;
@@ -491,11 +519,10 @@ export class WebSocketChannelSupplyEndpoint extends ServersBindEndpoint {
 	private _connectionCounter: number;
 
 	public constructor(
-		servers: ReadonlyArray<WebServer>,
-		opts: FHostingConfiguration.WebSocketEndpoint,
-		log: FLogger
+		servers: ReadonlyArray<FWebServer>,
+		opts: FHostingConfiguration.WebSocketEndpoint
 	) {
-		super(servers, opts, log);
+		super(servers, opts);
 		this._webSocketServers = [];
 		this._connections = new Set();
 		this._defaultProtocol = opts.defaultProtocol;
@@ -508,7 +535,9 @@ export class WebSocketChannelSupplyEndpoint extends ServersBindEndpoint {
 		this._connectionCounter = 0;
 	}
 
-	protected onInit(): void {
+	protected onInit(executionContext: FExecutionContext): void {
+		super.onInit(executionContext);
+
 		for (const server of this._servers) {
 			const webSocketServer = server.createWebSocketServer(this._bindPath); // new WebSocket.Server({ noServer: true });
 			this._webSocketServers.push(webSocketServer);
@@ -517,6 +546,8 @@ export class WebSocketChannelSupplyEndpoint extends ServersBindEndpoint {
 	}
 
 	protected async onDispose() {
+		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+
 		const connections = [...this._connections.values()];
 		this._connections.clear();
 		for (const webSocket of connections) {
@@ -529,10 +560,10 @@ export class WebSocketChannelSupplyEndpoint extends ServersBindEndpoint {
 			await new Promise<void>((resolve) => {
 				webSocketServer.close((err) => {
 					if (err !== undefined) {
-						if (this._log.isWarnEnabled) {
-							this._log.warn(`Web Socket Server was closed with error. Inner message: ${err.message} `);
+						if (logger.isWarnEnabled) {
+							logger.warn(`Web Socket Server was closed with error. Inner message: ${err.message} `);
 						}
-						this._log.trace("Web Socket Server was closed with error.", FException.wrapIfNeeded(err));
+						logger.trace("Web Socket Server was closed with error.", FException.wrapIfNeeded(err));
 					}
 
 					// dispose never raise any errors
@@ -550,20 +581,22 @@ export class WebSocketChannelSupplyEndpoint extends ServersBindEndpoint {
 			return;
 		}
 
+		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+
 		if (this._connectionCounter === Number.MAX_SAFE_INTEGER) { this._connectionCounter = 0; }
 		const connectionNumber: number = this._connectionCounter++;
 		const ipAddress: string | undefined = request.connection.remoteAddress;
-		if (ipAddress !== undefined && this._log.isTraceEnabled) {
-			this._log.trace(`Connection #${connectionNumber} was established from ${ipAddress} `);
+		if (ipAddress !== undefined && logger.isTraceEnabled) {
+			logger.trace(`Connection #${connectionNumber} was established from ${ipAddress} `);
 		}
-		if (this._log.isInfoEnabled) {
-			this._log.info(`Connection #${connectionNumber} was established`);
+		if (logger.isInfoEnabled) {
+			logger.info(`Connection #${connectionNumber} was established`);
 		}
 
 		const subProtocol: string = webSocket.protocol || this._defaultProtocol;
 		if (webSocket.protocol !== undefined) {
 			if (!this._allowedProtocols.has(subProtocol)) {
-				this._log.warn(`Connection #${connectionNumber} dropped. Not supported sub-protocol: ${subProtocol}`);
+				logger.warn(`Connection #${connectionNumber} dropped. Not supported sub-protocol: ${subProtocol}`);
 				// https://tools.ietf.org/html/rfc6455#section-7.4.1
 				webSocket.close(1007, `Wrong sub-protocol: ${subProtocol}`);
 				webSocket.terminate();
@@ -576,8 +609,8 @@ export class WebSocketChannelSupplyEndpoint extends ServersBindEndpoint {
 		webSocket.binaryType = "nodebuffer";
 
 		const channels: Map</*protocol:*/ string, {
-			binaryChannel?: WebSocketChannelSupplyEndpointHelpers.WebSocketBinaryChannelImpl,
-			textChannel?: WebSocketChannelSupplyEndpointHelpers.WebSocketTextChannelImpl
+			binaryChannel?: _FWebSocketChannelSupplyEndpointHelpers.WebSocketBinaryChannelImpl,
+			textChannel?: _FWebSocketChannelSupplyEndpointHelpers.WebSocketTextChannelImpl
 		}> = new Map();
 
 		webSocket.onmessage = async ({ data }) => {
@@ -590,7 +623,7 @@ export class WebSocketChannelSupplyEndpoint extends ServersBindEndpoint {
 
 				if (data instanceof Buffer) {
 					if (channelsTuple.binaryChannel === undefined) {
-						const binaryChannel = new WebSocketChannelSupplyEndpointHelpers.WebSocketBinaryChannelImpl(webSocket);
+						const binaryChannel = new _FWebSocketChannelSupplyEndpointHelpers.WebSocketBinaryChannelImpl(webSocket);
 						try {
 							this.onOpenBinaryChannel(webSocket, subProtocol, binaryChannel);
 						} catch (e) {
@@ -605,7 +638,7 @@ export class WebSocketChannelSupplyEndpoint extends ServersBindEndpoint {
 					await channelsTuple.binaryChannel.onMessage(FCancellationTokenSource.token, data);
 				} else if (_.isString(data)) {
 					if (channelsTuple.textChannel === undefined) {
-						const textChannel = new WebSocketChannelSupplyEndpointHelpers.WebSocketTextChannelImpl(webSocket);
+						const textChannel = new _FWebSocketChannelSupplyEndpointHelpers.WebSocketTextChannelImpl(webSocket);
 						try {
 							this.onOpenTextChannel(webSocket, subProtocol, textChannel);
 						} catch (e) {
@@ -619,8 +652,8 @@ export class WebSocketChannelSupplyEndpoint extends ServersBindEndpoint {
 					}
 					await channelsTuple.textChannel.onMessage(FCancellationTokenSource.token, data);
 				} else {
-					if (this._log.isDebugEnabled) {
-						this._log.debug(
+					if (logger.isDebugEnabled) {
+						logger.debug(
 							`Connection #${connectionNumber} cannot handle a message due not supported type. Terminate socket...`
 						);
 					}
@@ -630,23 +663,23 @@ export class WebSocketChannelSupplyEndpoint extends ServersBindEndpoint {
 					return;
 				}
 			} catch (e) {
-				if (this._log.isInfoEnabled || this._log.isTraceEnabled) {
+				if (logger.isInfoEnabled || logger.isTraceEnabled) {
 					const ex: FException = FException.wrapIfNeeded(e);
-					if (this._log.isInfoEnabled) {
-						this._log.info(`Connection #${connectionNumber} onMessage failed: ${ex.message}`);
+					if (logger.isInfoEnabled) {
+						logger.info(`Connection #${connectionNumber} onMessage failed: ${ex.message}`);
 					}
-					if (this._log.isTraceEnabled) {
-						this._log.trace(`Connection #${connectionNumber} onMessage failed:`, ex);
+					if (logger.isTraceEnabled) {
+						logger.trace(`Connection #${connectionNumber} onMessage failed:`, ex);
 					}
 				}
 			}
 		};
 		webSocket.onclose = ({ code, reason }) => {
-			if (this._log.isTraceEnabled) {
-				this._log.trace(`Connection #${connectionNumber} was closed: ${JSON.stringify({ code, reason })} `);
+			if (logger.isTraceEnabled) {
+				logger.trace(`Connection #${connectionNumber} was closed: ${JSON.stringify({ code, reason })} `);
 			}
-			if (this._log.isInfoEnabled) {
-				this._log.info(`Connection #${connectionNumber} was closed`);
+			if (logger.isInfoEnabled) {
+				logger.info(`Connection #${connectionNumber} was closed`);
 			}
 
 			FCancellationTokenSource.cancel();
@@ -677,7 +710,7 @@ export class WebSocketChannelSupplyEndpoint extends ServersBindEndpoint {
 	 * depending on the specified protocol).
 	 * @param channel Binary channel instance to be user in inherited class
 	 */
-	protected onOpenBinaryChannel(webSocket: WebSocket, subProtocol: string, channel: WebSocketChannelSupplyEndpoint.BinaryChannel): void {
+	protected onOpenBinaryChannel(webSocket: WebSocket, subProtocol: string, channel: FWebSocketChannelSupplyEndpoint.BinaryChannel): void {
 		throw new FExceptionInvalidOperation(`Binary messages are not supported by the sub-protocol: ${subProtocol}`);
 	}
 
@@ -691,11 +724,11 @@ export class WebSocketChannelSupplyEndpoint extends ServersBindEndpoint {
 	 * depending on the specified protocol).
 	 * @param channel Text channel instance to be user in inherited class
 	 */
-	protected onOpenTextChannel(webSocket: WebSocket, subProtocol: string, channel: WebSocketChannelSupplyEndpoint.TextChannel): void {
+	protected onOpenTextChannel(webSocket: WebSocket, subProtocol: string, channel: FWebSocketChannelSupplyEndpoint.TextChannel): void {
 		throw new FExceptionInvalidOperation(`Text messages are not supported by the sub-protocol: ${subProtocol}`);
 	}
 }
-export namespace WebSocketChannelSupplyEndpoint {
+export namespace FWebSocketChannelSupplyEndpoint {
 	export interface BinaryChannel extends FPublisherChannel<Uint8Array>, FSubscriberChannel<Uint8Array> { }
 	export interface TextChannel extends FPublisherChannel<string>, FSubscriberChannel<string> { }
 }
@@ -711,7 +744,7 @@ export namespace WebSocketChannelSupplyEndpoint {
  *
  * You need to override createBinaryChannel and/or createTextChannel to provide necessary channel
  */
-export class WebSocketChannelFactoryEndpoint extends ServersBindEndpoint {
+export class WebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 	private readonly _webSocketServers: Array<WebSocket.Server>;
 	private readonly _connections: Set<WebSocket>;
 	private readonly _autoCreateChannelBinary: boolean;
@@ -721,15 +754,14 @@ export class WebSocketChannelFactoryEndpoint extends ServersBindEndpoint {
 	private _connectionCounter: number;
 
 	public constructor(
-		servers: ReadonlyArray<WebServer>,
+		servers: ReadonlyArray<FWebServer>,
 		opts: FHostingConfiguration.WebSocketEndpoint,
-		log: FLogger,
 		autoCreateChannels?: {
 			binary?: boolean,
 			text?: boolean
 		}
 	) {
-		super(servers, opts, log);
+		super(servers, opts);
 		this._webSocketServers = [];
 		this._connections = new Set();
 		this._defaultProtocol = opts.defaultProtocol;
@@ -750,7 +782,9 @@ export class WebSocketChannelFactoryEndpoint extends ServersBindEndpoint {
 		}
 	}
 
-	protected onInit(): void {
+	protected onInit(executionContext: FExecutionContext): void {
+		super.onInit(executionContext);
+
 		for (const server of this._servers) {
 			const webSocketServer = server.createWebSocketServer(this._bindPath); // new WebSocket.Server({ noServer: true });
 			this._webSocketServers.push(webSocketServer);
@@ -781,20 +815,22 @@ export class WebSocketChannelFactoryEndpoint extends ServersBindEndpoint {
 			return;
 		}
 
+		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+
 		if (this._connectionCounter === Number.MAX_SAFE_INTEGER) { this._connectionCounter = 0; }
 		const connectionNumber: number = this._connectionCounter++;
 		const ipAddress: string | undefined = request.connection.remoteAddress;
-		if (ipAddress !== undefined && this._log.isTraceEnabled) {
-			this._log.trace(`Connection #${connectionNumber} was established from ${ipAddress} `);
+		if (ipAddress !== undefined && logger.isTraceEnabled) {
+			logger.trace(`Connection #${connectionNumber} was established from ${ipAddress} `);
 		}
-		if (this._log.isInfoEnabled) {
-			this._log.info(`Connection #${connectionNumber} was established`);
+		if (logger.isInfoEnabled) {
+			logger.info(`Connection #${connectionNumber} was established`);
 		}
 
 		const subProtocol: string = webSocket.protocol || this._defaultProtocol;
 		if (webSocket.protocol !== undefined) {
 			if (!this._allowedProtocols.has(subProtocol)) {
-				this._log.warn(`Connection #${connectionNumber} dropped. Not supported sub-protocol: ${subProtocol}`);
+				logger.warn(`Connection #${connectionNumber} dropped. Not supported sub-protocol: ${subProtocol}`);
 				// https://tools.ietf.org/html/rfc6455#section-7.4.1
 				webSocket.close(1007, `Wrong sub-protocol: ${subProtocol}`);
 				webSocket.terminate();
@@ -817,8 +853,8 @@ export class WebSocketChannelFactoryEndpoint extends ServersBindEndpoint {
 		) => {
 			if (event instanceof FException) {
 				// https://tools.ietf.org/html/rfc6455#section-7.4.1
-				this._log.debug("Channel emits error. " + event.message);
-				this._log.trace("Channel emits error.", event);
+				logger.debug("Channel emits error. " + event.message);
+				logger.trace("Channel emits error.", event);
 				webSocket.close(1011, event.message);
 				webSocket.terminate();
 			} else {
@@ -841,8 +877,8 @@ export class WebSocketChannelFactoryEndpoint extends ServersBindEndpoint {
 			} catch (e) {
 				// https://tools.ietf.org/html/rfc6455#section-7.4.1
 				const friendlyError: FException = FException.wrapIfNeeded(e);
-				this._log.debug(`Could not create binary channel. ${friendlyError.message}`);
-				this._log.trace("Could not create binary channel.", friendlyError);
+				logger.debug(`Could not create binary channel. ${friendlyError.message}`);
+				logger.trace("Could not create binary channel.", friendlyError);
 				webSocket.close(1011, friendlyError.message);
 				webSocket.terminate();
 				return;
@@ -863,8 +899,8 @@ export class WebSocketChannelFactoryEndpoint extends ServersBindEndpoint {
 			} catch (e) {
 				// https://tools.ietf.org/html/rfc6455#section-7.4.1
 				const friendlyError: FException = FException.wrapIfNeeded(e);
-				this._log.debug(`Could not create text channel. ${friendlyError.message}`);
-				this._log.trace("Could not create text channel.", friendlyError);
+				logger.debug(`Could not create text channel. ${friendlyError.message}`);
+				logger.trace("Could not create text channel.", friendlyError);
 				webSocket.close(1011, friendlyError.message);
 				webSocket.terminate();
 				return;
@@ -889,8 +925,8 @@ export class WebSocketChannelFactoryEndpoint extends ServersBindEndpoint {
 						} catch (e) {
 							// https://tools.ietf.org/html/rfc6455#section-7.4.1
 							const friendlyError: FException = FException.wrapIfNeeded(e);
-							this._log.debug(`Could not create binary channel. ${friendlyError.message}`);
-							this._log.trace("Could not create binary channel.", friendlyError);
+							logger.debug(`Could not create binary channel. ${friendlyError.message}`);
+							logger.trace("Could not create binary channel.", friendlyError);
 							webSocket.close(1011, friendlyError.message);
 							webSocket.terminate();
 							return;
@@ -907,8 +943,8 @@ export class WebSocketChannelFactoryEndpoint extends ServersBindEndpoint {
 						} catch (e) {
 							// https://tools.ietf.org/html/rfc6455#section-7.4.1
 							const friendlyError: FException = FException.wrapIfNeeded(e);
-							this._log.debug(`Could not create text channel. ${friendlyError.message}`);
-							this._log.trace("Could not create text channel.", friendlyError);
+							logger.debug(`Could not create text channel. ${friendlyError.message}`);
+							logger.trace("Could not create text channel.", friendlyError);
 							webSocket.close(1011, friendlyError.message);
 							webSocket.terminate();
 							return;
@@ -916,8 +952,8 @@ export class WebSocketChannelFactoryEndpoint extends ServersBindEndpoint {
 					}
 					await channelsTuple.textChannel.send(FExecutionContext.Empty, data);
 				} else {
-					if (this._log.isDebugEnabled) {
-						this._log.debug(
+					if (logger.isDebugEnabled) {
+						logger.debug(
 							`Connection #${connectionNumber} cannot handle a message due not supported type. Terminate socket...`
 						);
 					}
@@ -928,20 +964,20 @@ export class WebSocketChannelFactoryEndpoint extends ServersBindEndpoint {
 				}
 			} catch (e) {
 				const ex: FException = FException.wrapIfNeeded(e);
-				if (this._log.isInfoEnabled) {
-					this._log.info(`Connection #${connectionNumber} onMessage failed: ${ex.message}`);
+				if (logger.isInfoEnabled) {
+					logger.info(`Connection #${connectionNumber} onMessage failed: ${ex.message}`);
 				}
-				if (this._log.isTraceEnabled) {
-					this._log.trace(`Connection #${connectionNumber} onMessage failed:`, ex);
+				if (logger.isTraceEnabled) {
+					logger.trace(`Connection #${connectionNumber} onMessage failed:`, ex);
 				}
 			}
 		};
 		webSocket.onclose = ({ code, reason }) => {
-			if (this._log.isTraceEnabled) {
-				this._log.trace(`Connection #${connectionNumber} was closed: ${JSON.stringify({ code, reason })} `);
+			if (logger.isTraceEnabled) {
+				logger.trace(`Connection #${connectionNumber} was closed: ${JSON.stringify({ code, reason })} `);
 			}
-			if (this._log.isInfoEnabled) {
-				this._log.info(`Connection #${connectionNumber} was closed`);
+			if (logger.isInfoEnabled) {
+				logger.info(`Connection #${connectionNumber} was closed`);
 			}
 
 			FCancellationTokenSource.cancel();
@@ -998,7 +1034,7 @@ export namespace WebSocketChannelFactoryEndpoint {
 	export interface TextChannel extends FDisposableBase, FPublisherChannel<string>, FSubscriberChannel<string> { }
 }
 
-export function instanceofWebServer(server: any): server is WebServer {
+export function instanceofWebServer(server: any): server is FWebServer {
 	if (server instanceof UnsecuredWebServer) { return true; }
 	if (server instanceof SecuredWebServer) { return true; }
 
@@ -1018,12 +1054,12 @@ export function instanceofWebServer(server: any): server is WebServer {
 	return false;
 }
 
-export function createWebServer(serverOpts: FHostingConfiguration.WebServer, log: FLogger): WebServer {
+export function createWebServer(serverOpts: FHostingConfiguration.WebServer): FWebServer {
 	switch (serverOpts.type) {
 		case "http":
-			return new UnsecuredWebServer(serverOpts, log);
+			return new UnsecuredWebServer(serverOpts);
 		case "https":
-			return new SecuredWebServer(serverOpts, log);
+			return new SecuredWebServer(serverOpts);
 		default: {
 			const { type } = serverOpts;
 			throw new Error(`Not supported server type '${type}'`);
@@ -1032,9 +1068,9 @@ export function createWebServer(serverOpts: FHostingConfiguration.WebServer, log
 }
 
 export function createWebServers(
-	serversOpts: ReadonlyArray<FHostingConfiguration.WebServer>, log: FLogger
-): ReadonlyArray<WebServer> {
-	return serversOpts.map(serverOpts => createWebServer(serverOpts, log));
+	serversOpts: ReadonlyArray<FHostingConfiguration.WebServer>
+): ReadonlyArray<FWebServer> {
+	return serversOpts.map(serverOpts => createWebServer(serverOpts));
 }
 
 
@@ -1060,7 +1096,7 @@ function parseCertificates(certificates: Buffer | string | Array<string | Buffer
 	}
 }
 
-namespace WebSocketChannelSupplyEndpointHelpers {
+namespace _FWebSocketChannelSupplyEndpointHelpers {
 	export class WebSocketChannelBase<TData> {
 		protected readonly _webSocket: WebSocket;
 		protected readonly _callbacks: Array<FSubscriberChannel.Callback<TData>>;
@@ -1142,7 +1178,7 @@ namespace WebSocketChannelSupplyEndpointHelpers {
 		}
 	}
 	export class WebSocketBinaryChannelImpl extends WebSocketChannelBase<Uint8Array>
-		implements WebSocketChannelSupplyEndpoint.BinaryChannel { }
+		implements FWebSocketChannelSupplyEndpoint.BinaryChannel { }
 	export class WebSocketTextChannelImpl extends WebSocketChannelBase<string>
-		implements WebSocketChannelSupplyEndpoint.TextChannel { }
+		implements FWebSocketChannelSupplyEndpoint.TextChannel { }
 }

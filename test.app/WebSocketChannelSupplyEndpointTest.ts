@@ -4,8 +4,8 @@ import * as WebSocket from "ws";
 
 import * as THE from "../src/index";
 
-class TestWebSocketChannelsEndpoint extends THE.WebSocketChannelSupplyEndpoint {
-	protected onOpenBinaryChannel(webSocket: WebSocket, subProtocol: string, channel: THE.WebSocketChannelSupplyEndpoint.BinaryChannel) {
+class TestWebSocketChannelsEndpoint extends THE.FWebSocketChannelSupplyEndpoint {
+	protected onOpenBinaryChannel(webSocket: WebSocket, subProtocol: string, channel: THE.FWebSocketChannelSupplyEndpoint.BinaryChannel) {
 		let timer: NodeJS.Timeout | null = null;
 		let echoMessage: string;
 		const messageHandler = (executionContext: FExecutionContext, event: FSubscriberChannel.Event<Uint8Array> | FException): Promise<void> => {
@@ -39,7 +39,7 @@ class TestWebSocketChannelsEndpoint extends THE.WebSocketChannelSupplyEndpoint {
 		};
 		channel.addHandler(messageHandler);
 	}
-	protected onOpenTextChannel(webSocket: WebSocket, subProtocol: string, channel: THE.WebSocketChannelSupplyEndpoint.TextChannel) {
+	protected onOpenTextChannel(webSocket: WebSocket, subProtocol: string, channel: THE.FWebSocketChannelSupplyEndpoint.TextChannel) {
 		let timer: NodeJS.Timeout | null = null;
 		let echoMessage: string;
 		const messageHandler = (executionContext: FExecutionContext, event: FSubscriberChannel.Event<string> | FException): Promise<void> => {
@@ -80,7 +80,7 @@ async function main() {
 		listenHost: "0.0.0.0",
 		listenPort: 8080,
 		name: "Unsecured Server"
-	}, FLogger.Console.getLogger("Unsecured Server"));
+	});
 
 	const wsEndpoint = new TestWebSocketChannelsEndpoint(
 		[server],
@@ -88,8 +88,7 @@ async function main() {
 			bindPath: "/ws",
 			defaultProtocol: "text",
 			allowedProtocols: ["bin" /*, "text" - will be included automatically*/]
-		},
-		FLogger.Console.getLogger("wsEndpoint")
+		}
 	);
 
 	await wsEndpoint.init(FExecutionContext.Empty);
