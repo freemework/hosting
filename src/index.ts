@@ -1,4 +1,4 @@
-import { FAssertModuleVersion, FExecutionContext, FExecutionContextLogger, FPublisherChannel, FSubscriberChannel } from "@freemework/common";
+import { FAssertModuleVersion, FExecutionContext, FExecutionContextCancellation, FExecutionContextLogger, FPublisherChannel, FSubscriberChannel } from "@freemework/common";
 FAssertModuleVersion(require("../package.json"));
 
 import {
@@ -725,7 +725,7 @@ export namespace FWebSocketChannelSupplyEndpoint {
  *
  * You need to override createBinaryChannel and/or createTextChannel to provide necessary channel
  */
-export class WebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
+export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 	private readonly _webSocketServers: Array<WebSocket.Server>;
 	private readonly _connections: Set<WebSocket>;
 	private readonly _autoCreateChannelBinary: boolean;
@@ -819,13 +819,18 @@ export class WebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 			}
 		}
 
-		const FCancellationTokenSource = new FCancellationTokenSourceManual();
+		const cancellationTokenSource: FCancellationTokenSourceManual = new FCancellationTokenSourceManual();
+
+		const executionContext: FExecutionContext = new FExecutionContextCancellation(
+			FExecutionContext.None,
+			cancellationTokenSource.token
+		);
 
 		webSocket.binaryType = "nodebuffer";
 
 		const channels: Map</*protocol:*/ string, {
-			binaryChannel?: WebSocketChannelFactoryEndpoint.BinaryChannel,
-			textChannel?: WebSocketChannelFactoryEndpoint.TextChannel
+			binaryChannel?: FWebSocketChannelFactoryEndpoint.BinaryChannel,
+			textChannel?: FWebSocketChannelFactoryEndpoint.TextChannel
 		}> = new Map();
 
 		const handler = async (
@@ -851,8 +856,8 @@ export class WebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 				channels.set(subProtocol, channelsTuple);
 			}
 			try {
-				const binaryChannel: WebSocketChannelFactoryEndpoint.BinaryChannel
-					= await this.createBinaryChannel(FCancellationTokenSource.token, webSocket, subProtocol);
+				const binaryChannel: FWebSocketChannelFactoryEndpoint.BinaryChannel
+					= await this.createBinaryChannel(executionContext, webSocket, subProtocol);
 				channelsTuple.binaryChannel = binaryChannel;
 				binaryChannel.addHandler(handler);
 			} catch (e) {
@@ -873,8 +878,8 @@ export class WebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 				channels.set(subProtocol, channelsTuple);
 			}
 			try {
-				const textChannel: WebSocketChannelFactoryEndpoint.TextChannel
-					= await this.createTextChannel(FCancellationTokenSource.token, webSocket, subProtocol);
+				const textChannel: FWebSocketChannelFactoryEndpoint.TextChannel
+					= await this.createTextChannel(executionContext, webSocket, subProtocol);
 				channelsTuple.textChannel = textChannel;
 				textChannel.addHandler(handler);
 			} catch (e) {
@@ -899,8 +904,8 @@ export class WebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 				if (data instanceof Buffer) {
 					if (channelsTuple.binaryChannel === undefined) {
 						try {
-							const binaryChannel: WebSocketChannelFactoryEndpoint.BinaryChannel
-								= await this.createBinaryChannel(FCancellationTokenSource.token, webSocket, subProtocol);
+							const binaryChannel: FWebSocketChannelFactoryEndpoint.BinaryChannel
+								= await this.createBinaryChannel(executionContext, webSocket, subProtocol);
 							channelsTuple.binaryChannel = binaryChannel;
 							binaryChannel.addHandler(handler);
 						} catch (e) {
@@ -917,8 +922,8 @@ export class WebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 				} else if (_.isString(data)) {
 					if (channelsTuple.textChannel === undefined) {
 						try {
-							const textChannel: WebSocketChannelFactoryEndpoint.TextChannel
-								= await this.createTextChannel(FCancellationTokenSource.token, webSocket, subProtocol);
+							const textChannel: FWebSocketChannelFactoryEndpoint.TextChannel
+								= await this.createTextChannel(executionContext, webSocket, subProtocol);
 							channelsTuple.textChannel = textChannel;
 							textChannel.addHandler(handler);
 						} catch (e) {
@@ -961,7 +966,7 @@ export class WebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 				logger.info(`Connection #${connectionNumber} was closed`);
 			}
 
-			FCancellationTokenSource.cancel();
+			cancellationTokenSource.cancel();
 			this._connections.delete(webSocket);
 
 			for (const channelsTuple of channels.values()) {
@@ -990,8 +995,8 @@ export class WebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 	 * depending on the specified protocol).
 	 */
 	protected createBinaryChannel(
-		cancellationToken: FCancellationToken, webSocket: WebSocket, subProtocol: string
-	): Promise<WebSocketChannelFactoryEndpoint.BinaryChannel> {
+		executionContext: FExecutionContext, webSocket: WebSocket, subProtocol: string
+	): Promise<FWebSocketChannelFactoryEndpoint.BinaryChannel> {
 		throw new FExceptionInvalidOperation(`Binary messages are not supported by the sub-protocol: ${subProtocol}`);
 	}
 
@@ -1005,12 +1010,12 @@ export class WebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 	 * depending on the specified protocol).
 	 */
 	protected createTextChannel(
-		cancellationToken: FCancellationToken, webSocket: WebSocket, subProtocol: string
-	): Promise<WebSocketChannelFactoryEndpoint.TextChannel> {
+		executionContext: FExecutionContext, webSocket: WebSocket, subProtocol: string
+	): Promise<FWebSocketChannelFactoryEndpoint.TextChannel> {
 		throw new FExceptionInvalidOperation(`Text messages are not supported by the sub-protocol: ${subProtocol}`);
 	}
 }
-export namespace WebSocketChannelFactoryEndpoint {
+export namespace FWebSocketChannelFactoryEndpoint {
 	export interface BinaryChannel extends FDisposableBase, FPublisherChannel<Uint8Array>, FSubscriberChannel<Uint8Array> { }
 	export interface TextChannel extends FDisposableBase, FPublisherChannel<string>, FSubscriberChannel<string> { }
 }

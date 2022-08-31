@@ -129,15 +129,15 @@ class TextEchoChannel extends FDisposableBase implements THE.FWebSocketChannelSu
 	}
 }
 
-class TestWebSocketChannelsEndpoint extends THE.WebSocketChannelFactoryEndpoint {
+class TestWebSocketChannelsEndpoint extends THE.FWebSocketChannelFactoryEndpoint {
 	protected async createBinaryChannel(
-		cancellationToken: FCancellationToken, webSocket: WebSocket, subProtocol: string
+		executionContext: FExecutionContext, webSocket: WebSocket, subProtocol: string
 	): Promise<BinaryEchoChannel> {
 		await sleep(250);
 		return new BinaryEchoChannel(500, subProtocol);
 	}
 	protected async createTextChannel(
-		cancellationToken: FCancellationToken, webSocket: WebSocket, subProtocol: string
+		executionContext: FExecutionContext, webSocket: WebSocket, subProtocol: string
 	): Promise<TextEchoChannel> {
 		await sleep(250);
 		return new TextEchoChannel(500, subProtocol);
