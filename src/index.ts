@@ -168,7 +168,7 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 		}
 	}
 
-	protected async onInit(executionContext: FExecutionContext): Promise<void> {
+	protected async onInit(): Promise<void> {
 		this.underlayingServer.on("upgrade", this._onUpgrade);
 		await this.onListen();
 	}
@@ -464,7 +464,7 @@ export abstract class FBindEndpoint extends FInitableBase {
 		this._bindPath = opts.bindPath;
 	}
 
-	protected onInit(executionContext: FExecutionContext): void {
+	protected onInit(): void {
 		// NOP
 	}
 }
@@ -516,8 +516,8 @@ export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 		this._connectionCounter = 0;
 	}
 
-	protected onInit(executionContext: FExecutionContext): void {
-		super.onInit(executionContext);
+	protected onInit(): void {
+		super.onInit();
 
 		for (const server of this._servers) {
 			const webSocketServer = server.createWebSocketServer(this._bindPath); // new WebSocket.Server({ noServer: true });
@@ -763,8 +763,8 @@ export class WebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 		}
 	}
 
-	protected onInit(executionContext: FExecutionContext): void {
-		super.onInit(executionContext);
+	protected onInit(): void {
+		super.onInit();
 
 		for (const server of this._servers) {
 			const webSocketServer = server.createWebSocketServer(this._bindPath); // new WebSocket.Server({ noServer: true });
