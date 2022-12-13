@@ -1,4 +1,4 @@
-import { FDisposable, FDisposableBase, FExecutionContext, FLogger, FPublisherChannel, FSubscriberChannel } from "@freemework/common";
+import { FDisposable, FDisposableBase, FExecutionContext, FPublisherChannel, FSubscriberChannel } from "@freemework/common";
 import * as http from "http";
 import { FHostingConfiguration } from "../src/FHostingConfiguration";
 
@@ -122,7 +122,7 @@ rOgEbvrU9VHU1UkWSoCXefFQyw==
 let server1: THE.SecuredWebServer;
 let server2: THE.UnsecuredWebServer;
 
-class TimerSubsciberChannel extends FDisposableBase implements FSubscriberChannel<Date> {
+class TimerSubscriberChannel extends FDisposableBase implements FSubscriberChannel<Date> {
 	private readonly _timeout: number;
 	private readonly _handlers: Set<FSubscriberChannel.Callback<Date, FSubscriberChannel.Event<Date>>>;
 	private _timer?: NodeJS.Timeout;
@@ -160,7 +160,7 @@ class TimerSubsciberChannel extends FDisposableBase implements FSubscriberChanne
 	}
 }
 
-const subscriptionChannel = new TimerSubsciberChannel(250);
+const subscriptionChannel = new TimerSubscriberChannel(250);
 
 class MyRestEndpoint extends THE.FServersBindEndpoint {
 	protected onInit(): void {
@@ -178,25 +178,25 @@ class MyRestEndpoint extends THE.FServersBindEndpoint {
 	}
 }
 
-class SubsciberHandle {
-	private readonly _timerSubsciberChannel: TimerSubsciberChannel;
+class SubscriberHandle {
+	private readonly _timerSubscriberChannel: TimerSubscriberChannel;
 	private readonly _publisherChannel: FPublisherChannel<string>;
 	private readonly _event: FSubscriberChannel.Callback<Date, FSubscriberChannel.Event<Date>>;
 	private readonly _token: string;
 
-	public constructor(timerSubsciberChannel: TimerSubsciberChannel, publisherChannel: FPublisherChannel<string>) {
-		this._timerSubsciberChannel = timerSubsciberChannel;
+	public constructor(timerSubscriberChannel: TimerSubscriberChannel, publisherChannel: FPublisherChannel<string>) {
+		this._timerSubscriberChannel = timerSubscriberChannel;
 		this._publisherChannel = publisherChannel;
 		this._event = this.onEvent.bind(this);
 		this._token = Date.now().toString();
 
-		this._timerSubsciberChannel.addHandler(this._event);
+		this._timerSubscriberChannel.addHandler(this._event);
 	}
 
 	public get token(): string { return this._token; }
 
 	public destroy() {
-		this._timerSubsciberChannel.removeHandler(this._event);
+		this._timerSubscriberChannel.removeHandler(this._event);
 	}
 
 	private async onEvent(executionContext: FExecutionContext, ev: FSubscriberChannel.Event<Date> | Error): Promise<void> {
@@ -207,73 +207,6 @@ class SubsciberHandle {
 		this._publisherChannel.send(executionContext, `[${this._token}] Now: ${ev.data}`);
 	}
 }
-
-// class MyTextProtocolAdapter extends THE.AbstractProtocolAdapter<string> {
-// 	private readonly _subscribers: Map<string, SubsciberHandle>;
-
-// 	public constructor(callbackChannel: THE.ProtocolAdapter.CallbackChannel<string>, log: cryptopay.Logger) {
-// 		super(callbackChannel, log);
-// 		this._subscribers = new Map();
-// 	}
-
-// 	public handleMessage(
-// 		ct: cryptopay.CancellationToken, data: string, next?: THE.ProtocolAdapter.Next<string>
-// 	) {
-// 		if (data === "Hello") {
-// 			return Promise.resolve("World!!!");
-// 		} else if (data === "subscribe") {
-// 			const handle = new SubsciberHandle(subscriptionChannel, this._callbackChannel);
-// 			this._subscribers.set(handle.token, handle);
-// 		}
-
-// 		if (next !== undefined) {
-// 			return next(ct, data);
-// 		}
-// 		return Promise.reject(new Error("Next was not provided"));
-// 	}
-
-// 	protected onDispose() {
-// 		for (const s of this._subscribers.values()) {
-// 			s.destroy();
-// 		}
-// 		this._subscribers.clear();
-// 	}
-// }
-// class MyTextProtocolAdapter2 extends THE.AbstractProtocolAdapter<string> {
-// 	public handleMessage(
-// 		ct: cryptopay.CancellationToken, data: string, next?: THE.ProtocolAdapter.Next<string>
-// 	) {
-// 		return Promise.resolve(data);
-// 	}
-// 	protected onDispose() {
-// 		//nop
-// 	}
-// }
-
-// class MyBinaryProtocolAdapter extends THE.AbstractProtocolAdapter<ArrayBuffer> {
-// 	public handleMessage(
-// 		ct: cryptopay.CancellationToken, data: ArrayBuffer, next?: THE.ProtocolAdapter.Next<ArrayBuffer>
-// 	) {
-// 		if (next !== undefined) {
-// 			return next(ct, data);
-// 		}
-// 		return Promise.reject(new Error("Next was not provided"));
-// 	}
-
-// 	protected onDispose() {
-// 		//nop
-// 	}
-// }
-// class MyBinaryProtocolAdapter2 extends THE.AbstractProtocolAdapter<ArrayBuffer> {
-// 	public handleMessage(
-// 		ct: cryptopay.CancellationToken, data: ArrayBuffer, next?: THE.ProtocolAdapter.Next<ArrayBuffer>
-// 	) {
-// 		return Promise.resolve(data);
-// 	}
-// 	protected onDispose() {
-// 		//nop
-// 	}
-// }
 
 async function main() {
 

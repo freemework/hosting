@@ -1,4 +1,4 @@
-import { FConfiguration } from "@freemework/common";
+import { FConfigurationLegacy } from "@freemework/common";
 
 export namespace FHostingConfiguration {
 	export type WebServer = UnsecuredWebServer | SecuredWebServer;
@@ -71,7 +71,7 @@ export namespace FHostingConfiguration {
 		TRUST = "trust",
 
 		/**
-		 * The server WILL retreive a certificate from the HTTP header X-Forwarded-Client-Cert and validate the certificate.
+		 * The server WILL retrieve a certificate from the HTTP header X-Forwarded-Client-Cert and validate the certificate.
 		 * Rejects untrusted certificate
 		 * Hist: Use $ssl_client_escaped_cert NGINX variable to set X-Forwarded-Client-Cert header inside configuration.
 		 */
@@ -91,7 +91,7 @@ export namespace FHostingConfiguration {
 		readonly allowedProtocols?: ReadonlyArray<string>;
 	}
 
-	export function parseWebServer(configuration: FConfiguration, serverName: string): WebServer {
+	export function parseWebServer(configuration: FConfigurationLegacy, serverName: string): WebServer {
 		const serverType = configuration.getString("type");
 		switch (serverType) {
 			case "http": {
@@ -200,7 +200,7 @@ export namespace FHostingConfiguration {
 		}
 	}
 
-	export function parseWebServers(configuration: FConfiguration): Array<FHostingConfiguration.WebServer> {
+	export function parseWebServers(configuration: FConfigurationLegacy): Array<FHostingConfiguration.WebServer> {
 		const serverIndexes: Array<string> = configuration.getString("servers").split(" ");
 		const servers: Array<FHostingConfiguration.WebServer> = serverIndexes.map(serverName =>
 			FHostingConfiguration.parseWebServer(configuration.getNamespace(`server.${serverName}`), serverName)

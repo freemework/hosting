@@ -1,5 +1,5 @@
 import {
-	FConfiguration, FException, FExceptionArgument, FExceptionConfiguration
+	FConfigurationLegacy, FException, FExceptionArgument, FExceptionConfiguration
 } from "@freemework/common";
 
 import * as TOML from "@iarna/toml";
@@ -13,17 +13,17 @@ const readFile = promisify(fs.readFile);
 const readdir = promisify(fs.readdir);
 const stat = promisify(fs.stat);
 
-export function chainConfiguration(...configurations: ReadonlyArray<FConfiguration>): FConfiguration {
+export function chainConfiguration(...configurations: ReadonlyArray<FConfigurationLegacy>): FConfigurationLegacy {
 	if (configurations.length === 0) {
 		throw new FExceptionArgument("Expected at least one sub configuration", "configurations");
 	}
 	const items = configurations.slice();
 	function binder(
-		method: keyof FConfiguration, callback: (configurationItem: FConfiguration, key: string) => any
+		method: keyof FConfigurationLegacy, callback: (configurationItem: FConfigurationLegacy, key: string) => any
 	): (key: string, defaultValue?: any) => any {
 		function bind(key: string, defaultValue?: any) {
 			for (let itemIndex = 0; itemIndex < items.length; ++itemIndex) {
-				const configurationItem: FConfiguration = items[itemIndex];
+				const configurationItem: FConfigurationLegacy = items[itemIndex];
 				if (configurationItem.has(key)) {
 					return callback(configurationItem, key);
 				}
@@ -35,7 +35,7 @@ export function chainConfiguration(...configurations: ReadonlyArray<FConfigurati
 		}
 		return bind;
 	}
-	const chainConfigurationInstance: FConfiguration = {
+	const chainConfigurationInstance: FConfigurationLegacy = {
 		get configurationNamespace() { return items[0].configurationNamespace; },
 		get keys() {
 			return _.union(...items.map(item => item.keys));
@@ -43,8 +43,8 @@ export function chainConfiguration(...configurations: ReadonlyArray<FConfigurati
 		get: binder("get", (cfg, key) => cfg.get(key)),
 		getBase64: binder("getBase64", (cfg, key) => cfg.getBase64(key)),
 		getBoolean: binder("getBoolean", (cfg, key) => cfg.getBoolean(key)),
-		getNamespace(configurationNamespace: string): FConfiguration {
-			const subItems: Array<FConfiguration> = [];
+		getNamespace(configurationNamespace: string): FConfigurationLegacy {
+			const subItems: Array<FConfigurationLegacy> = [];
 			items.forEach(function (item) {
 				if (item.hasNamespace(configurationNamespace)) {
 					subItems.push(item.getNamespace(configurationNamespace));
@@ -109,14 +109,14 @@ export function chainConfiguration(...configurations: ReadonlyArray<FConfigurati
 	};
 	return chainConfigurationInstance;
 }
-export function fileConfiguration(configFile: string): FConfiguration {
+export function fileConfiguration(configFile: string): FConfigurationLegacy {
 	const dict: ConfigurationImpl.Dictionary = {};
 	propertiesFileContentProcessor(configFile, (name: string, value: string) => {
 		dict[name] = value;
 	});
 	return new ConfigurationImpl(dict);
 }
-export function envConfiguration(): FConfiguration {
+export function envConfiguration(): FConfigurationLegacy {
 	const dict: ConfigurationImpl.Dictionary = {};
 	_.entries(process.env).forEach(([name, value]) => {
 		if (value !== undefined) {
@@ -132,11 +132,11 @@ export function envConfiguration(): FConfiguration {
 
 	return config;
 }
-export function cmdConfiguration(): FConfiguration {
+export function cmdConfiguration(): FConfigurationLegacy {
 	//TODO
 	throw new FExceptionConfiguration("Not implemented yet", null, null);
 }
-export function tomlConfiguration(tomlDocument: string): FConfiguration {
+export function tomlConfiguration(tomlDocument: string): FConfigurationLegacy {
 	const data: TOML.JsonMap = TOML.parse(tomlDocument);
 
 	const configDict: ConfigurationImpl.Dictionary = {};
@@ -174,7 +174,7 @@ export function tomlConfiguration(tomlDocument: string): FConfiguration {
 
 	return new ConfigurationImpl(configDict);
 }
-export function tomlFileConfiguration(tomlConfigFile: string): FConfiguration {
+export function tomlFileConfiguration(tomlConfigFile: string): FConfigurationLegacy {
 	const fileContent: Buffer = fs.readFileSync(tomlConfigFile);
 	return tomlConfiguration(fileContent.toString("utf-8"));
 }
@@ -183,7 +183,7 @@ export function tomlFileConfiguration(tomlConfigFile: string): FConfiguration {
  * Main reason for this is https://docs.docker.com/engine/swarm/secrets/
  * @param directory a directory where secret files are placed
  */
-export async function secretsDirectoryConfiguration(directory?: string): Promise<FConfiguration> {
+export async function secretsDirectoryConfiguration(directory?: string): Promise<FConfigurationLegacy> {
 	if (directory === undefined) {
 		// Setup default dir
 		// https://docs.docker.com/engine/swarm/secrets/
@@ -205,7 +205,7 @@ export async function secretsDirectoryConfiguration(directory?: string): Promise
 
 	return new ConfigurationImpl(dict);
 }
-export function develVirtualFilesConfiguration(configDir: string, develSite: string): FConfiguration {
+export function develVirtualFilesConfiguration(configDir: string, develSite: string): FConfigurationLegacy {
 	if (!configDir) { throw new FExceptionArgument("configDir"); }
 	if (!fs.existsSync(configDir)) {
 		throw new FExceptionConfiguration(
@@ -248,7 +248,7 @@ export namespace ConfigurationImpl {
 	export type Dictionary = { [key: string]: string };
 }
 
-export class ConfigurationImpl implements FConfiguration {
+export class ConfigurationImpl implements FConfigurationLegacy {
 	private readonly _dict: Readonly<ConfigurationImpl.Dictionary>;
 	private readonly _parentNamespace?: string;
 	private _keys?: ReadonlyArray<string>;
@@ -274,11 +274,11 @@ export class ConfigurationImpl implements FConfiguration {
 	/**
 	 * @deprecated Use `getNamespace` instead
 	 */
-	public getConfiguration(configurationNamespace: string): FConfiguration {
+	public getConfiguration(configurationNamespace: string): FConfigurationLegacy {
 		return this.getNamespace(configurationNamespace);
 	}
 
-	public getNamespace(configurationNamespace: string): FConfiguration {
+	public getNamespace(configurationNamespace: string): FConfigurationLegacy {
 		if (!configurationNamespace) { throw new FExceptionArgument("configurationNamespace"); }
 		const subDict: ConfigurationImpl.Dictionary = {};
 		const criteria = configurationNamespace + ".";
@@ -301,7 +301,7 @@ export class ConfigurationImpl implements FConfiguration {
 		return new ConfigurationImpl(subDict, parentNamespace);
 	}
 
-	public getIndexer(indexerName: string = "indexer"): Array<FConfiguration> {
+	public getIndexer(indexerName: string = "indexer"): Array<FConfigurationLegacy> {
 		const indexer = this.getString(indexerName);
 		return indexer.split(" ").map(index => this.getNamespace(index));
 	}

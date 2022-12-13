@@ -1,12 +1,13 @@
 import {
-	FAssertModuleVersion,
+	FmoduleVersionGuard,
 	FDisposable, FExecutionContext,
 	FExecutionContextCancellation,
-	FExecutionContextLogger,
+	FExecutionContextLoggerLegacy,
 	FPublisherChannel,
 	FSubscriberChannel
 } from "@freemework/common";
-FAssertModuleVersion(require("../package.json"));
+
+FmoduleVersionGuard(require("../package.json"));
 
 import {
 	FCancellationToken,
@@ -15,8 +16,7 @@ import {
 	FExceptionInvalidOperation,
 	FExceptionAggregate,
 	FInitableBase,
-	FLogger,
-	FDisposableBase,
+	FLoggerLegacy,
 } from "@freemework/common";
 
 import * as express from "express";
@@ -154,7 +154,7 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 		return websocketServer;
 	}
 	public async destroyWebSocketServer(bindPath: string): Promise<void> {
-		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
 
 		const webSocketServer = this._websockets[bindPath];
 		if (webSocketServer !== undefined) {
@@ -201,7 +201,7 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 	}
 
 	private onRequestCommon(req: http.IncomingMessage, res: http.ServerResponse): void {
-		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
 
 		if (this._handlers.size > 0 && req.url !== undefined) {
 			const { pathname } = new URL(req.url);
@@ -240,7 +240,7 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 	}
 
 	private onUpgradeCommon(req: http.IncomingMessage, socket: net.Socket, head: Buffer): void {
-		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
 
 		const urlPath = req.url;
 		if (urlPath !== undefined) {
@@ -269,7 +269,7 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 	}
 
 	private validateXFCC(req: http.IncomingMessage): boolean {
-		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
 
 		const xfccHeaderData = req && req.headers && req.headers["x-forwarded-client-cert"];
 		if (_.isString(xfccHeaderData)) {
@@ -311,7 +311,7 @@ export class UnsecuredWebServer extends FAbstractWebServer<FHostingConfiguration
 	public get underlyingServer(): http.Server { return this._httpServer; }
 
 	protected onListen(): Promise<void> {
-		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
 
 		logger.debug("UnsecuredWebServer#listen()");
 		const opts: FHostingConfiguration.UnsecuredWebServer = this._opts;
@@ -336,7 +336,7 @@ export class UnsecuredWebServer extends FAbstractWebServer<FHostingConfiguration
 	}
 
 	protected async onDispose() {
-		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
 		logger.debug("UnsecuredWebServer#onDispose()");
 		const server = this._httpServer;
 		const address = server.address();
@@ -409,7 +409,7 @@ export class SecuredWebServer extends FAbstractWebServer<FHostingConfiguration.S
 	public get underlyingServer(): https.Server { return this._httpsServer; }
 
 	protected onListen(): Promise<void> {
-		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
 		logger.debug("SecuredWebServer#listen()");
 		const opts: FHostingConfiguration.SecuredWebServer = this._opts;
 		const server: https.Server = this._httpsServer;
@@ -433,7 +433,7 @@ export class SecuredWebServer extends FAbstractWebServer<FHostingConfiguration.S
 	}
 
 	protected async onDispose() {
-		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
 		logger.debug("SecuredWebServer#onDispose()");
 		const server = this._httpsServer;
 		const address = server.address();
@@ -534,7 +534,7 @@ export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 	}
 
 	protected async onDispose() {
-		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
 
 		const connections = [...this._connections.values()];
 		this._connections.clear();
@@ -569,7 +569,7 @@ export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 			return;
 		}
 
-		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
 
 		if (this._connectionCounter === Number.MAX_SAFE_INTEGER) { this._connectionCounter = 0; }
 		const connectionNumber: number = this._connectionCounter++;
@@ -803,7 +803,7 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 			return;
 		}
 
-		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
+		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
 
 		if (this._connectionCounter === Number.MAX_SAFE_INTEGER) { this._connectionCounter = 0; }
 		const connectionNumber: number = this._connectionCounter++;

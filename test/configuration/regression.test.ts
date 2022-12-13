@@ -1,4 +1,4 @@
-import { FConfiguration } from "@freemework/common";
+import { FConfigurationLegacy } from "@freemework/common";
 
 import { assert } from "chai";
 
@@ -6,11 +6,11 @@ import { ConfigurationImpl, chainConfiguration } from "../../src";
 
 describe("Regression tests", function () {
 	it("Method key() should works for sub-configuration (bug in 6.0.23)", function () {
-		const config1: FConfiguration = new ConfigurationImpl({
+		const config1: FConfigurationLegacy = new ConfigurationImpl({
 			"a.b1": "b1value",
 			"a.b2": "b2value"
 		});
-		const config2: FConfiguration = new ConfigurationImpl({
+		const config2: FConfigurationLegacy = new ConfigurationImpl({
 			"a.b1": "b1valueOverride",
 			"a.b3": "b3value"
 		});
@@ -39,10 +39,10 @@ describe("Regression tests", function () {
 	});
 
 	it("Method getURL() should raise error with full key name for sub-configuration (bug in 6.0.36)", function () {
-		const config1: FConfiguration = new ConfigurationImpl({
+		const config1: FConfigurationLegacy = new ConfigurationImpl({
 			"a.url": "http://localhost:9090"
 		});
-		const config2: FConfiguration = new ConfigurationImpl({
+		const config2: FConfigurationLegacy = new ConfigurationImpl({
 			"a.url": "http://localhost:8080"
 		});
 
@@ -63,10 +63,10 @@ describe("Regression tests", function () {
 	});
 
 	it("6.0.40: Ability to mask namespace in chain configuration", function () {
-		const config1: FConfiguration = new ConfigurationImpl({
+		const config1: FConfigurationLegacy = new ConfigurationImpl({
 			"a.ssl.ca": "/path/to/ca.crt"
 		});
-		const config2: FConfiguration = new ConfigurationImpl({
+		const config2: FConfigurationLegacy = new ConfigurationImpl({
 			"a.ssl": "" // Mask namespace "a.ssl"
 		});
 

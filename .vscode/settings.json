@@ -39,11 +39,14 @@
 	"git.rebaseWhenSync": true,
 	"cSpell.words": [
 		"Anurin",
+		"Devel",
 		"freemework",
 		"iarna",
 		"Initable",
 		"lcov",
+		"linklocal",
 		"nodebuffer",
+		"uniquelocal",
 		"websockets",
 		"Xfcc"
 	]

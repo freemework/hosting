@@ -1,14 +1,14 @@
 import {
-	FConfiguration
+	FConfigurationLegacy
 } from "@freemework/common";
 
 import { assert } from "chai";
 
-import * as thislib from "../../src";
+import * as THE from "../../src";
 
 describe("chainConfiguration tests", function () {
 	it("Generic test", function () {
-		const fakeConfguraton0: FConfiguration = {
+		const fakeConfiguration0: FConfigurationLegacy = {
 			configurationNamespace: "",
 			get(key: string) { throw new Error(); },
 			getBase64(key: string) { throw new Error(); },
@@ -17,7 +17,7 @@ describe("chainConfiguration tests", function () {
 			getFloat(key: string, defaultValue?: number): number { if (key === "ageFloat") { return 0; } throw new Error(); },
 			getIndexer() { throw new Error(); },
 			getInteger(key: string, defaultValue?: number): number { if (key === "ageInt") { return 0; } throw new Error(); },
-			getNamespace(configurationNamespace: string): FConfiguration { throw new Error(); },
+			getNamespace(configurationNamespace: string): FConfigurationLegacy { throw new Error(); },
 			getString(key: string, defaultValue?: string): string { if (key === "ageString") { return "0"; } throw new Error(); },
 			getURL(key: string) { throw new Error(); },
 			has(key: string): boolean { return ["ageString", "ageInt", "ageFloat"].includes(key); },
@@ -25,7 +25,7 @@ describe("chainConfiguration tests", function () {
 			hasNonEmpty(key: string): boolean { throw new Error(); },
 			get keys() { return ["ageString", "ageInt", "ageFloat"]; }
 		};
-		const fakeConfguraton1: FConfiguration = {
+		const fakeConfiguration1: FConfigurationLegacy = {
 			configurationNamespace: "",
 			get(key: string) { throw new Error(); },
 			getBase64(key: string) { throw new Error(); },
@@ -34,15 +34,15 @@ describe("chainConfiguration tests", function () {
 			getFloat(key: string, defaultValue?: number): number { throw new Error(); },
 			getIndexer() { throw new Error(); },
 			getInteger(key: string, defaultValue?: number): number { if (key === "ageInt") { return 1; } throw new Error(); },
-			getNamespace(configurationNamespace: string): FConfiguration { throw new Error(); },
+			getNamespace(configurationNamespace: string): FConfigurationLegacy { throw new Error(); },
 			getString(key: string, defaultValue?: string): string { if (key === "ageString") { return "1"; } throw new Error(); },
 			getURL(key: string) { throw new Error(); },
 			has(key: string): boolean { return ["ageString", "ageInt"].includes(key); },
 			hasNamespace(configurationNamespace: string): boolean { throw new Error(); },
-			hasNonEmpty(key: string): boolean { return fakeConfguraton1.has(key); },
+			hasNonEmpty(key: string): boolean { return fakeConfiguration1.has(key); },
 			get keys() { return ["ageInt", "ageString"]; }
 		};
-		const fakeConfguraton2: FConfiguration = {
+		const fakeConfiguration2: FConfigurationLegacy = {
 			configurationNamespace: "",
 			get(key: string) { throw new Error(); },
 			getBase64(key: string) { throw new Error(); },
@@ -51,19 +51,19 @@ describe("chainConfiguration tests", function () {
 			getFloat(key: string, defaultValue?: number): number { throw new Error(); },
 			getIndexer() { throw new Error(); },
 			getInteger(key: string, defaultValue?: number): number { throw new Error(); },
-			getNamespace(configurationNamespace: string): FConfiguration { throw new Error(); },
+			getNamespace(configurationNamespace: string): FConfigurationLegacy { throw new Error(); },
 			getString(key: string, defaultValue?: string): string { if (key === "ageString") { return "2"; } throw new Error(); },
 			getURL(key: string) { throw new Error(); },
 			has(key: string): boolean { return ["ageString"].includes(key); },
 			hasNamespace(configurationNamespace: string): boolean { throw new Error(); },
-			hasNonEmpty(key: string): boolean { return fakeConfguraton2.has(key); },
+			hasNonEmpty(key: string): boolean { return fakeConfiguration2.has(key); },
 			get keys() { return ["ageString"]; }
 		};
 
-		const chain = thislib.chainConfiguration(fakeConfguraton2, fakeConfguraton1, fakeConfguraton0);
-		assert.equal(chain.getString("ageString"), "2", "Should take value from fakeConfguraton2");
-		assert.equal(chain.getInteger("ageInt"), 1, "Should take value from fakeConfguraton1");
-		assert.equal(chain.getFloat("ageFloat"), 0, "Should take value from fakeConfguraton0");
+		const chain = THE.chainConfiguration(fakeConfiguration2, fakeConfiguration1, fakeConfiguration0);
+		assert.equal(chain.getString("ageString"), "2", "Should take value from fakeConfiguration2");
+		assert.equal(chain.getInteger("ageInt"), 1, "Should take value from fakeConfiguration1");
+		assert.equal(chain.getFloat("ageFloat"), 0, "Should take value from fakeConfiguration0");
 	});
 
 
@@ -94,7 +94,7 @@ describe("chainConfiguration tests", function () {
 			keys() { return ["foo"]; }
 		};
 
-		const chain = thislib.chainConfiguration(overrideConfig, commonConfig);
+		const chain = THE.chainConfiguration(overrideConfig, commonConfig);
 		assert.equal(chain.getInteger("boo"), 12, "Should take value from commonConfig");
 		assert.isTrue(chain.has("foo"));
 		assert.isFalse(chain.hasNonEmpty("foo"));
@@ -102,17 +102,17 @@ describe("chainConfiguration tests", function () {
 	});
 
 	it("Bug: 6.0.33", function () {
-		const cfg1 = new thislib.ConfigurationImpl({
+		const cfg1 = new THE.ConfigurationImpl({
 			"bla": "bla"
 		});
-		const cfg2 = new thislib.ConfigurationImpl({
+		const cfg2 = new THE.ConfigurationImpl({
 			"endpoint.0.type": "rest",
 			"endpoint.0.servers": "main",
 			"endpoint.0.bindPath": "/",
 			"endpoints": "0"
 		});
 
-		const chainConfiguration = thislib.chainConfiguration(cfg1, cfg2);
+		const chainConfiguration = THE.chainConfiguration(cfg1, cfg2);
 		assert.isObject(chainConfiguration);
 
 		const endpointsConfiguration = chainConfiguration.getString("endpoints");
@@ -129,17 +129,17 @@ describe("chainConfiguration tests", function () {
 	});
 
 	it("Bug: 6.0.33 (indexer)", function () {
-		const cfg1 = new thislib.ConfigurationImpl({
+		const cfg1 = new THE.ConfigurationImpl({
 			"bla": "bla"
 		});
-		const cfg2 = new thislib.ConfigurationImpl({
+		const cfg2 = new THE.ConfigurationImpl({
 			"endpoint.0.type": "rest",
 			"endpoint.0.servers": "main",
 			"endpoint.0.bindPath": "/",
 			"endpoint.list": "0"
 		});
 
-		const chainConfiguration = thislib.chainConfiguration(cfg1, cfg2);
+		const chainConfiguration = THE.chainConfiguration(cfg1, cfg2);
 		assert.isObject(chainConfiguration);
 
 		const endpointConfigurations = chainConfiguration.getNamespace("endpoint").getIndexer("list");
@@ -153,27 +153,27 @@ describe("chainConfiguration tests", function () {
 	});
 
 	it("Should return Default value", function () {
-		const cfg1 = new thislib.ConfigurationImpl({
+		const cfg1 = new THE.ConfigurationImpl({
 			"bla": "bla"
 		});
-		const cfg2 = new thislib.ConfigurationImpl({
+		const cfg2 = new THE.ConfigurationImpl({
 			"la": "la"
 		});
 
-		const chainConfiguration = thislib.chainConfiguration(cfg1, cfg2);
+		const chainConfiguration = THE.chainConfiguration(cfg1, cfg2);
 
 		assert.equal(chainConfiguration.getString("non", "non"), "non");
 	});
 
 	it("Should raise error for not existing namespace", function () {
-		const cfg1 = new thislib.ConfigurationImpl({
+		const cfg1 = new THE.ConfigurationImpl({
 			"bla": "bla"
 		});
-		const cfg2 = new thislib.ConfigurationImpl({
+		const cfg2 = new THE.ConfigurationImpl({
 			"la": "la"
 		});
 
-		const chainConfiguration = thislib.chainConfiguration(cfg1, cfg2);
+		const chainConfiguration = THE.chainConfiguration(cfg1, cfg2);
 
 		let expectedErr;
 		try {

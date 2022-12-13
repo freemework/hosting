@@ -1,11 +1,11 @@
 import {
 	FException,
-	FConfiguration,
+	FConfigurationLegacy,
 	FExecutionContext,
 	FCancellationTokenSource,
 	FCancellationTokenSourceManual,
-	FLogger,
-	FExecutionContextLogger,
+	FLoggerLegacy,
+	FExecutionContextLoggerLegacy,
 	FExecutionContextCancellation,
 	FExceptionCancelled
 } from "@freemework/common";
@@ -43,11 +43,11 @@ export function Flauncher<TConfiguration>(
 ): void;
 
 export function Flauncher<TConfiguration>(...args: Array<any>): void {
-	const log: FLogger = FLogger.Console;
+	const log: FLoggerLegacy = FLoggerLegacy.Console;
 
 	async function run() {
 		const cancellationTokenSource: FCancellationTokenSource = new FCancellationTokenSourceManual();
-		const executionContext: FExecutionContext = new FExecutionContextLogger(
+		const executionContext: FExecutionContext = new FExecutionContextLoggerLegacy(
 			new FExecutionContextCancellation(
 				FExecutionContext.Empty,
 				cancellationTokenSource.token
@@ -97,7 +97,7 @@ export function Flauncher<TConfiguration>(...args: Array<any>): void {
 			if (runtimeStuff.parser === null) {
 				runtime = await runtimeStuff.runtimeFactory(executionContext);
 			} else {
-				const rawConfiguration: FConfiguration = await runtimeStuff.loader(executionContext);
+				const rawConfiguration: FConfigurationLegacy = await runtimeStuff.loader(executionContext);
 				const parsedConfiguration: TConfiguration = runtimeStuff.parser(rawConfiguration);
 				runtime = await runtimeStuff.runtimeFactory(executionContext, parsedConfiguration);
 			}
@@ -178,22 +178,22 @@ export interface FLauncherRuntime {
 	destroy(): Promise<void>;
 }
 
-export type RawConfigurationLoader = (executionContext: FExecutionContext) => Promise<FConfiguration>;
-export type ConfigurationParser<TConfiguration> = (rawConfiguration: FConfiguration) => TConfiguration;
+export type RawConfigurationLoader = (executionContext: FExecutionContext) => Promise<FConfigurationLegacy>;
+export type ConfigurationParser<TConfiguration> = (rawConfiguration: FConfigurationLegacy) => TConfiguration;
 
 export type FLauncherRuntimeFactory<TConfiguration> = (executionContext: FExecutionContext, configuration: TConfiguration) => Promise<FLauncherRuntime>;
 export type FConfigLessRuntimeFactory = (executionContext: FExecutionContext) => Promise<FLauncherRuntime>;
 
-export async function defaultConfigurationLoader(executionContext: FExecutionContext): Promise<FConfiguration> {
-	const chainItems: Array<FConfiguration> = [];
+export async function defaultConfigurationLoader(executionContext: FExecutionContext): Promise<FConfigurationLegacy> {
+	const chainItems: Array<FConfigurationLegacy> = [];
 	for (const arg of process.argv) {
 		if (arg.startsWith(defaultConfigurationLoader.CONFIG_FILE_ARG)) {
 			const configFile = arg.substring(defaultConfigurationLoader.CONFIG_FILE_ARG.length);
-			const fileConf: FConfiguration = await fileConfiguration(configFile);
+			const fileConf: FConfigurationLegacy = await fileConfiguration(configFile);
 			chainItems.push(fileConf);
 		} else if (arg.startsWith(defaultConfigurationLoader.CONFIG_TOML_FILE_ARG)) {
 			const configFile = arg.substring(defaultConfigurationLoader.CONFIG_TOML_FILE_ARG.length);
-			const fileConf: FConfiguration = await tomlFileConfiguration(configFile);
+			const fileConf: FConfigurationLegacy = await tomlFileConfiguration(configFile);
 			chainItems.push(fileConf);
 		} else if (arg.startsWith(defaultConfigurationLoader.CONFIG_SECRET_DIR_ARG)) {
 			const secretsDir = arg.substring(defaultConfigurationLoader.CONFIG_SECRET_DIR_ARG.length);
@@ -213,7 +213,7 @@ export async function defaultConfigurationLoader(executionContext: FExecutionCon
 	}
 
 	chainItems.reverse();
-	const rawConfiguration: FConfiguration = chainConfiguration(...chainItems);
+	const rawConfiguration: FConfigurationLegacy = chainConfiguration(...chainItems);
 
 	return rawConfiguration;
 }
@@ -231,7 +231,7 @@ export function registerShutdownHook(cb: () => Promise<void>): void {
 const shutdownHooks: Array<() => Promise<void>> = [];
 async function fireShutdownHooks(): Promise<void> {
 	if (shutdownHooks.length > 0) {
-		const log = FLogger.Console.getLogger("launcher.fireShutdownHooks");
+		const log = FLoggerLegacy.Console.getLogger("launcher.fireShutdownHooks");
 		log.debug("Executing shutdown hooks...");
 		const shutdownHooksCopy = [...shutdownHooks];
 		do {

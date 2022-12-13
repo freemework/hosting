@@ -5,14 +5,15 @@ import * as fs from "fs";
 import * as tmp from "tmp";
 import {userInfo} from "os";
 
-import * as thislib from "../../src";
-import { FConfiguration, FExceptionArgument } from "@freemework/common";
+import { FConfigurationLegacy, FExceptionArgument } from "@freemework/common";
+
+import * as THE from "../../src";
 
 describe("Development configuration test getString", function () {
 	let tempDirectoryObj: tmp.DirResult;
 	before(() => {
 		// runs before all tests in this block
-		tempDirectoryObj = tmp.dirSync();
+		tempDirectoryObj = tmp.dirSync({ unsafeCleanup: true });
 		const currentUserName = userInfo().username;
 		const projectConfigDir = path.join(tempDirectoryObj.name, "project.properties");
 		const userConfigDir = path.join(tempDirectoryObj.name, "user.properties");
@@ -51,7 +52,7 @@ describe("Development configuration test getString", function () {
 	});
 
 	it("Site's and user's values should override Devel Virtual Files FConfiguration", function () {
-		const config = thislib.develVirtualFilesConfiguration(tempDirectoryObj.name, "DEVEL");
+		const config = THE.develVirtualFilesConfiguration(tempDirectoryObj.name, "DEVEL");
 		assert.equal(config.getString("a.a.a"), "project-root-a");
 		assert.equal(config.getString("a.a.b"), "project-site-b"); // Site's value
 		assert.equal(config.getString("a.a.d"), "user-own-d"); // User's value
@@ -62,7 +63,7 @@ describe("Development configuration test getString", function () {
 		process.env["a.a.b"] = "env-own-b";
 		process.env["a.a.c"] = "env-own-c";
 		process.env["a.a.d"] = "env-own-d";
-		const config = thislib.develVirtualFilesConfiguration(tempDirectoryObj.name, "DEVEL");
+		const config = THE.develVirtualFilesConfiguration(tempDirectoryObj.name, "DEVEL");
 		assert.equal(config.getString("a.a.a"), "env-own-a");
 		assert.equal(config.getString("a.a.b"), "env-own-b");
 		assert.equal(config.getString("a.a.c"), "env-own-c");
@@ -74,7 +75,7 @@ describe("Development configuration test getString", function () {
 		process.env["a.a.b"] = "env-own-b";
 		process.env["a.a.c"] = "env-own-c";
 		process.env["a.a.d"] = "env-own-d";
-		const config = thislib.fileConfiguration(path.join(tempDirectoryObj.name, "project.properties", "config.properties"));
+		const config = THE.fileConfiguration(path.join(tempDirectoryObj.name, "project.properties", "config.properties"));
 		assert.equal(config.getString("a.a.a"), "project-root-a");
 		assert.equal(config.getString("a.a.b"), "project-root-b");
 		assert.equal(config.getString("a.a.c"), "project-root-c");
@@ -82,7 +83,7 @@ describe("Development configuration test getString", function () {
 	});
 
 	it("File FConfiguration should be namespace-able", function () {
-		const config = thislib.fileConfiguration(path.join(tempDirectoryObj.name, "project.properties", "config.properties"));
+		const config = THE.fileConfiguration(path.join(tempDirectoryObj.name, "project.properties", "config.properties"));
 		const nsConfig1 = config.getNamespace("a");
 		assert.equal(nsConfig1.getString("a.a"), "project-root-a");
 		assert.equal(nsConfig1.getString("a.b"), "project-root-b");
@@ -101,7 +102,7 @@ describe("Development configuration test getString", function () {
 	});
 
 	it("Devel Virtual Files FConfiguration should be namespace-able", function () {
-		const config = thislib.develVirtualFilesConfiguration(tempDirectoryObj.name, "DEVEL");
+		const config = THE.develVirtualFilesConfiguration(tempDirectoryObj.name, "DEVEL");
 		const nsConfig1 = config.getNamespace("a");
 		assert.equal(nsConfig1.getString("a.a"), "project-root-a");
 		assert.equal(nsConfig1.getString("a.b"), "project-site-b"); // Site's value
@@ -119,7 +120,7 @@ describe("Development configuration test getString", function () {
 
 describe("Checks all methods with type", function () {
 	let tempDirectoryObj: tmp.DirResult;
-	let config: FConfiguration;
+	let config: FConfigurationLegacy;
 	before(() => {
 		// runs before all tests in this block
 		tempDirectoryObj = tmp.dirSync();
@@ -150,7 +151,7 @@ describe("Checks all methods with type", function () {
 	});
 
 	beforeEach(() => {
-		config = thislib.fileConfiguration(path.join(tempDirectoryObj.name, "project.properties", "configTypes.properties"));
+		config = THE.fileConfiguration(path.join(tempDirectoryObj.name, "project.properties", "configTypes.properties"));
 	});
 	it("Should be return enabledType", function () {
 		assert.equal(config.getEnabled("enabledType"), true);
@@ -207,7 +208,7 @@ describe("Checks all methods with type", function () {
 });
 describe("Checks all methods default value", function () {
 	let tempDirectoryObj: tmp.DirResult;
-	let config: FConfiguration;
+	let config: FConfigurationLegacy;
 	before(() => {
 		// runs before all tests in this block
 		tempDirectoryObj = tmp.dirSync();
@@ -222,7 +223,7 @@ describe("Checks all methods default value", function () {
 	});
 
 	beforeEach(() => {
-		config = thislib.fileConfiguration(path.join(tempDirectoryObj.name, "project.properties", "configdefaultValue.properties"));
+		config = THE.fileConfiguration(path.join(tempDirectoryObj.name, "project.properties", "configdefaultValue.properties"));
 	});
 	it("Should be return getEnabled true", function () {
 		assert.equal(config.getEnabled("int", true), true);
@@ -258,7 +259,7 @@ describe("Checks all methods default value", function () {
 
 describe("Negative test", function () {
 	let tempDirectoryObj: tmp.DirResult;
-	let config: FConfiguration;
+	let config: FConfigurationLegacy;
 	before(() => {
 		// runs before all tests in this block
 		tempDirectoryObj = tmp.dirSync();
@@ -279,7 +280,7 @@ describe("Negative test", function () {
 	});
 
 	beforeEach(() => {
-		config = thislib.fileConfiguration(path.join(tempDirectoryObj.name, "project.properties", "configErrors.properties"));
+		config = THE.fileConfiguration(path.join(tempDirectoryObj.name, "project.properties", "configErrors.properties"));
 	});
 	it("Should be execution error Wrong argument on getBoolean", function () {
 		try {
@@ -463,7 +464,7 @@ describe("Negative test", function () {
 	it("Should be execution error FExceptionArgument on develVirtualFilesConfiguration", function () {
 		try {
 			let emptyDir: any;
-			thislib.develVirtualFilesConfiguration(emptyDir, emptyDir);
+			THE.develVirtualFilesConfiguration(emptyDir, emptyDir);
 		} catch (err) {
 			assert.instanceOf(err, FExceptionArgument);
 			return;
@@ -473,7 +474,7 @@ describe("Negative test", function () {
 	it("Should be execution error Bad configuration directory on develVirtualFilesConfiguration", function () {
 		try {
 			let emptyDir: any = "go";
-			thislib.develVirtualFilesConfiguration(emptyDir, emptyDir);
+			THE.develVirtualFilesConfiguration(emptyDir, emptyDir);
 		} catch (err) {
 			assert((<any>err).message.startsWith("Bad configuration directory"));
 			return;
@@ -486,7 +487,7 @@ describe("Negative test specific for develVirtualFilesConfiguration", function (
 	it("Should be execution error Skip a configuration file on develVirtualFilesConfiguration", function () {
 		try {
 			const tempDirectoryObj = tmp.dirSync();
-			const config = thislib.develVirtualFilesConfiguration(tempDirectoryObj.name, "project.properties");
+			const config = THE.develVirtualFilesConfiguration(tempDirectoryObj.name, "project.properties");
 		} catch (err) {
 			assert((<any>err).message.startsWith("Skip a configuration file"));
 			return;

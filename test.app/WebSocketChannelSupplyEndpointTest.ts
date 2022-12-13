@@ -1,4 +1,4 @@
-import { FException, FExecutionContext, FLogger, FSubscriberChannel } from "@freemework/common";
+import { FException, FExecutionContext, FSubscriberChannel } from "@freemework/common";
 import * as _ from "lodash";
 import * as WebSocket from "ws";
 
