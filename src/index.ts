@@ -1,4 +1,11 @@
-import { FAssertModuleVersion, FExecutionContext, FExecutionContextCancellation, FExecutionContextLogger, FPublisherChannel, FSubscriberChannel } from "@freemework/common";
+import {
+	FAssertModuleVersion,
+	FDisposable, FExecutionContext,
+	FExecutionContextCancellation,
+	FExecutionContextLogger,
+	FPublisherChannel,
+	FSubscriberChannel
+} from "@freemework/common";
 FAssertModuleVersion(require("../package.json"));
 
 import {
@@ -36,7 +43,7 @@ export type FWebServerRequestHandler = http.RequestListener;
 
 export interface FWebServer extends FInitableBase {
 	readonly name: string;
-	readonly underlayingServer: http.Server | https.Server;
+	readonly underlyingServer: http.Server | https.Server;
 	rootExpressApplication: express.Application;
 	bindRequestHandler(bindPath: string, handler: FWebServerRequestHandler): void;
 	createWebSocketServer(bindPath: string): WebSocket.Server;
@@ -45,7 +52,7 @@ export interface FWebServer extends FInitableBase {
 
 export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.WebServerBase | FHostingConfiguration.WebServer>
 	extends FInitableBase implements FWebServer {
-	public abstract readonly underlayingServer: http.Server | https.Server;
+	public abstract readonly underlyingServer: http.Server | https.Server;
 	protected readonly _opts: TOpts;
 	protected readonly _websockets: { [bindPath: string]: WebSocket.Server };
 	private readonly _onUpgrade: (request: http.IncomingMessage, socket: net.Socket, head: Buffer) => void;
@@ -136,7 +143,7 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 
 	public bindRequestHandler(bindPath: string, value: FWebServerRequestHandler): void {
 		if (this._handlers.has(bindPath)) {
-			throw new Error(`Wrong operation. Path '${bindPath}' already binded`);
+			throw new Error(`Wrong operation. Path '${bindPath}' already bound`);
 		}
 		this._handlers.set(bindPath, value);
 	}
@@ -169,7 +176,7 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 	}
 
 	protected async onInit(): Promise<void> {
-		this.underlayingServer.on("upgrade", this._onUpgrade);
+		this.underlyingServer.on("upgrade", this._onUpgrade);
 		await this.onListen();
 	}
 
@@ -301,7 +308,7 @@ export class UnsecuredWebServer extends FAbstractWebServer<FHostingConfiguration
 		this._httpServer = http.createServer(serverOpts, this.onRequest.bind(this));
 	}
 
-	public get underlayingServer(): http.Server { return this._httpServer; }
+	public get underlyingServer(): http.Server { return this._httpServer; }
 
 	protected onListen(): Promise<void> {
 		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
@@ -335,12 +342,12 @@ export class UnsecuredWebServer extends FAbstractWebServer<FHostingConfiguration
 		const address = server.address();
 		if (address !== null) {
 			if (typeof address === "string") {
-				logger.info("Stoping Web Server http://" + address + "...");
+				logger.info("Stopping Web Server http://" + address + "...");
 			} else {
-				logger.info("Stoping " + address.family + " Web Server http://" + address.address + ":" + address.port + "...");
+				logger.info("Stopping " + address.family + " Web Server http://" + address.address + ":" + address.port + "...");
 			}
 		} else {
-			logger.info("Stoping Web Server...");
+			logger.info("Stopping Web Server...");
 		}
 		await new Promise<void>((destroyResolve) => {
 			server.close((e) => {
@@ -399,7 +406,7 @@ export class SecuredWebServer extends FAbstractWebServer<FHostingConfiguration.S
 		this._httpsServer = https.createServer(serverOpts, this.onRequest.bind(this));
 	}
 
-	public get underlayingServer(): https.Server { return this._httpsServer; }
+	public get underlyingServer(): https.Server { return this._httpsServer; }
 
 	protected onListen(): Promise<void> {
 		const logger: FLogger = FExecutionContextLogger.of(this.initExecutionContext).logger;
@@ -432,12 +439,12 @@ export class SecuredWebServer extends FAbstractWebServer<FHostingConfiguration.S
 		const address = server.address();
 		if (address !== null) {
 			if (typeof address === "string") {
-				logger.info("Stoping Web Server https://" + address + "...");
+				logger.info("Stopping Web Server https://" + address + "...");
 			} else {
-				logger.info("Stoping " + address.family + " Web Server https://" + address.address + ":" + address.port + "...");
+				logger.info("Stopping " + address.family + " Web Server https://" + address.address + ":" + address.port + "...");
 			}
 		} else {
-			logger.info("Stoping Web Server...");
+			logger.info("Stopping Web Server...");
 		}
 		await new Promise<void>((destroyResolve) => {
 			server.close((e) => {
@@ -488,7 +495,7 @@ export abstract class FServersBindEndpoint extends FBindEndpoint {
  *   - Client's messages delivered via SubscriberChannel
  *   - To deliver message to client use PublisherChannel
  *
- * If you need oposite behavior take a look for `WebSocketChannelFactoryEndpoint`
+ * If you need opposite behavior take a look for `WebSocketChannelFactoryEndpoint`
  *
  * You need to override onOpenBinaryChannel and/or onOpenTextChannel to obtain necessary channel
  */
@@ -682,7 +689,7 @@ export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 	}
 
 	/**
-	 * The method should be overriden. The method called by the endpoint,
+	 * The method should be overridden. The method called by the endpoint,
 	 * when WSClient sent first binary message for specified sub-protocol.
 	 * @param webSocket WebSocket instance
 	 * @param subProtocol These strings are used to indicate sub-protocols,
@@ -696,7 +703,7 @@ export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 	}
 
 	/**
-	 * The method should be overriden. The method called by the endpoint,
+	 * The method should be overridden. The method called by the endpoint,
 	 * when WSClient sent first text message for specified sub-protocol.
 	 * @param webSocket WebSocket instance
 	 * @param subProtocol These strings are used to indicate sub-protocols,
@@ -721,7 +728,7 @@ export namespace FWebSocketChannelSupplyEndpoint {
  *   - Client's messages delivered via PublisherChannel
  *   - To deliver message to client use SubscriberChannel
  *
- * If you need oposite behavior take a look for `WebSocketChannelSupplyEndpoint`
+ * If you need opposite behavior take a look for `WebSocketChannelSupplyEndpoint`
  *
  * You need to override createBinaryChannel and/or createTextChannel to provide necessary channel
  */
@@ -986,7 +993,7 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 	}
 
 	/**
-	 * The method should be overriden. The method called by the endpoint,
+	 * The method should be overridden. The method called by the endpoint,
 	 * when WSClient sent first binary message for specified sub-protocol.
 	 * @param webSocket WebSocket instance
 	 * @param subProtocol These strings are used to indicate sub-protocols,
@@ -1001,7 +1008,7 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 	}
 
 	/**
-	 * The method should be overriden. The method called by the endpoint,
+	 * The method should be overridden. The method called by the endpoint,
 	 * when WSClient sent first text message for specified sub-protocol.
 	 * @param webSocket WebSocket instance
 	 * @param subProtocol These strings are used to indicate sub-protocols,
@@ -1016,8 +1023,8 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 	}
 }
 export namespace FWebSocketChannelFactoryEndpoint {
-	export interface BinaryChannel extends FDisposableBase, FPublisherChannel<Uint8Array>, FSubscriberChannel<Uint8Array> { }
-	export interface TextChannel extends FDisposableBase, FPublisherChannel<string>, FSubscriberChannel<string> { }
+	export interface BinaryChannel extends FDisposable, FPublisherChannel<Uint8Array>, FSubscriberChannel<Uint8Array> { }
+	export interface TextChannel extends FDisposable, FPublisherChannel<string>, FSubscriberChannel<string> { }
 }
 
 export function instanceofWebServer(server: any): server is FWebServer {
@@ -1027,7 +1034,7 @@ export function instanceofWebServer(server: any): server is FWebServer {
 	if (
 		process.env.NODE_ENV === "development" &&
 		"name" in server &&
-		"underlayingServer" in server &&
+		"underlyingServer" in server &&
 		"rootExpressApplication" in server &&
 		"bindRequestHandler" in server &&
 		"createWebSocketServer" in server &&
@@ -1101,7 +1108,7 @@ namespace _FWebSocketChannelSupplyEndpointHelpers {
 			}
 			await Promise.all(this._callbacks.map(async (callback) => {
 				try {
-					// Notify that channel brokes
+					// Notify that channel broken
 					await callback(FExecutionContext.Empty, ex);
 				} catch (e) {
 					// Nothing to do any more with fucking client's callback. Just log STDERR.
@@ -1125,7 +1132,7 @@ namespace _FWebSocketChannelSupplyEndpointHelpers {
 			});
 			await Promise.all(safePromises);
 			if (errors.length > 0) {
-				// The callback supplier is shitcoder. Closing channel and socket to prevent flowing shit...
+				// The callback supplier is shit coder. Closing channel and socket to prevent flowing shit...
 				this._isBroken = true;
 
 				// https://tools.ietf.org/html/rfc6455#section-7.4.1
@@ -1135,7 +1142,7 @@ namespace _FWebSocketChannelSupplyEndpointHelpers {
 				const aggregatedError = new FExceptionAggregate(errors);
 				await Promise.all(this._callbacks.map(async (callback) => {
 					try {
-						// Notify that channel brokes
+						// Notify that channel broken
 						await callback(FExecutionContext.Empty, aggregatedError);
 					} catch (e) {
 						// Nothing to do any more with fucking client's callback. Just log STDERR.
