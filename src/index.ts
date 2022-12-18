@@ -1,10 +1,10 @@
 import {
 	FmoduleVersionGuard,
-	FDisposable, FExecutionContext,
-	FExecutionContextCancellation,
-	FExecutionContextLoggerLegacy,
-	FPublisherChannel,
-	FSubscriberChannel
+	FDisposable,
+	FExecutionContext,
+	FCancellationExecutionContext,
+	FChannelPublisher,
+	FChannelSubscriber
 } from "@freemework/common";
 
 FmoduleVersionGuard(require("../package.json"));
@@ -16,7 +16,7 @@ import {
 	FExceptionInvalidOperation,
 	FExceptionAggregate,
 	FInitableBase,
-	FLoggerLegacy,
+	FLogger,
 } from "@freemework/common";
 
 import * as express from "express";
@@ -53,8 +53,13 @@ export interface FWebServer extends FInitableBase {
 export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.WebServerBase | FHostingConfiguration.WebServer>
 	extends FInitableBase implements FWebServer {
 	public abstract readonly underlyingServer: http.Server | https.Server;
-	protected readonly _opts: TOpts;
+	// protected readonly _opts: TOpts;
+	protected readonly _trustProxy: boolean | "loopback" | "linklocal" | "uniquelocal";
+	protected readonly _name: string;
+	protected readonly _listenHost: string;
+	protected readonly _listenPort: number;
 	protected readonly _websockets: { [bindPath: string]: WebSocket.Server };
+	protected readonly _log: FLogger;
 	private readonly _onUpgrade: (request: http.IncomingMessage, socket: net.Socket, head: Buffer) => void;
 	private readonly _onRequestImpl: http.RequestListener;
 	private readonly _handlers: Map</*bindPath: */string, FWebServerRequestHandler>;
@@ -67,7 +72,11 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 
 	public constructor(opts: TOpts) {
 		super();
-		this._opts = opts;
+		this._name = opts.name;
+		this._listenHost = opts.listenHost;
+		this._listenPort = opts.listenPort;
+		this._log = opts.log !== undefined ? opts.log : FLogger.create(this.constructor.name);
+		this._trustProxy = opts.trustProxy !== undefined ? opts.trustProxy : false;
 		this._websockets = {};
 		this._handlers = new Map();
 		this._rootExpressApplication = null;
@@ -124,7 +133,7 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 	public get rootExpressApplication(): express.Application {
 		if (this._rootExpressApplication === null) {
 			this._rootExpressApplication = express();
-			const trustProxy = this._opts.trustProxy;
+			const trustProxy = this._trustProxy;
 			if (trustProxy !== undefined) {
 				this._rootExpressApplication.set("trust proxy", trustProxy);
 			}
@@ -139,7 +148,7 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 		this._rootExpressApplication = value;
 	}
 
-	public get name(): string { return this._opts.name; }
+	public get name(): string { return this._name; }
 
 	public bindRequestHandler(bindPath: string, value: FWebServerRequestHandler): void {
 		if (this._handlers.has(bindPath)) {
@@ -154,7 +163,7 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 		return websocketServer;
 	}
 	public async destroyWebSocketServer(bindPath: string): Promise<void> {
-		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
+		const logger: FLogger = this._log;
 
 		const webSocketServer = this._websockets[bindPath];
 		if (webSocketServer !== undefined) {
@@ -163,9 +172,9 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 				webSocketServer.close((err) => {
 					if (err !== undefined) {
 						if (logger.isWarnEnabled) {
-							logger.warn(`Web Socket Server was closed with error. Inner message: ${err.message} `);
+							logger.warn(this.initExecutionContext, `Web Socket Server was closed with error. Inner message: ${err.message} `);
 						}
-						logger.trace("Web Socket Server was closed with error.", FException.wrapIfNeeded(err));
+						logger.trace(this.initExecutionContext, "Web Socket Server was closed with error.", FException.wrapIfNeeded(err));
 					}
 
 					// dispose never raise any errors
@@ -201,7 +210,7 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 	}
 
 	private onRequestCommon(req: http.IncomingMessage, res: http.ServerResponse): void {
-		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
+		const logger: FLogger = this._log;
 
 		if (this._handlers.size > 0 && req.url !== undefined) {
 			const { pathname } = new URL(req.url);
@@ -222,7 +231,7 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 			return;
 		}
 
-		logger.warn("Request was handled but no listener.");
+		logger.warn(this.initExecutionContext, "Request was handled but no listener.");
 		res.writeHead(503);
 		res.statusMessage = "Service Unavailable";
 		res.end();
@@ -240,13 +249,13 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 	}
 
 	private onUpgradeCommon(req: http.IncomingMessage, socket: net.Socket, head: Buffer): void {
-		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
+		const logger: FLogger = this._log;
 
 		const urlPath = req.url;
 		if (urlPath !== undefined) {
 			const wss = this._websockets[urlPath];
 			if (wss !== undefined) {
-				logger.debug(`Upgrade the server on url path '${urlPath}' for WebSocket server.`);
+				logger.debug(this.initExecutionContext, `Upgrade the server on url path '${urlPath}' for WebSocket server.`);
 				wss.handleUpgrade(req, socket, head, function (ws) {
 					wss.emit("connection", ws, req);
 				});
@@ -269,11 +278,11 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 	}
 
 	private validateXFCC(req: http.IncomingMessage): boolean {
-		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
+		const logger: FLogger = this._log;
 
 		const xfccHeaderData = req && req.headers && req.headers["x-forwarded-client-cert"];
 		if (_.isString(xfccHeaderData)) {
-			logger.trace(`X-Forwarded-Client-Cert header: ${xfccHeaderData}`);
+			logger.trace(this.initExecutionContext, `X-Forwarded-Client-Cert header: ${xfccHeaderData}`);
 
 			const clientCertPem = urlDecode(xfccHeaderData);
 			const clientCert = pki.certificateFromPem(clientCertPem);
@@ -284,11 +293,11 @@ export abstract class FAbstractWebServer<TOpts extends FHostingConfiguration.Web
 						return true;
 					}
 				} catch (e) {
-					logger.trace("Verify failed.", FException.wrapIfNeeded(e));
+					logger.trace(this.initExecutionContext, "Verify failed.", FException.wrapIfNeeded(e));
 				}
 			}
 		} else {
-			logger.debug("Request with no X-Forwarded-Client-Cert header.");
+			logger.debug(this.initExecutionContext, "Request with no X-Forwarded-Client-Cert header.");
 		}
 
 		return false;
@@ -311,52 +320,52 @@ export class UnsecuredWebServer extends FAbstractWebServer<FHostingConfiguration
 	public get underlyingServer(): http.Server { return this._httpServer; }
 
 	protected onListen(): Promise<void> {
-		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
+		const logger: FLogger = this._log;
 
-		logger.debug("UnsecuredWebServer#listen()");
-		const opts: FHostingConfiguration.UnsecuredWebServer = this._opts;
+		logger.debug(this.initExecutionContext, "UnsecuredWebServer#listen()");
+
 		const server: http.Server = this._httpServer;
 		return new Promise<void>((resolve, reject) => {
-			logger.info("Starting Web Server...");
+			logger.info(this.initExecutionContext, "Starting Web Server...");
 			server
 				.on("listening", () => {
 					const address = server.address();
 					if (address !== null) {
 						if (typeof address === "string") {
-							logger.info(`Web Server was started on ${address}`);
+							logger.info(this.initExecutionContext, `Web Server was started on ${address}`);
 						} else {
-							logger.info(address.family + " Web Server was started on http://" + address.address + ":" + address.port);
+							logger.info(this.initExecutionContext, address.family + " Web Server was started on http://" + address.address + ":" + address.port);
 						}
 					}
 					resolve();
 				})
 				.on("error", reject)
-				.listen(opts.listenPort, opts.listenHost);
+				.listen(this._listenPort, this._listenHost);
 		});
 	}
 
 	protected async onDispose() {
-		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
-		logger.debug("UnsecuredWebServer#onDispose()");
+		const logger: FLogger = this._log;
+		logger.debug(this.initExecutionContext, "UnsecuredWebServer#onDispose()");
 		const server = this._httpServer;
 		const address = server.address();
 		if (address !== null) {
 			if (typeof address === "string") {
-				logger.info("Stopping Web Server http://" + address + "...");
+				logger.info(this.initExecutionContext, "Stopping Web Server http://" + address + "...");
 			} else {
-				logger.info("Stopping " + address.family + " Web Server http://" + address.address + ":" + address.port + "...");
+				logger.info(this.initExecutionContext, "Stopping " + address.family + " Web Server http://" + address.address + ":" + address.port + "...");
 			}
 		} else {
-			logger.info("Stopping Web Server...");
+			logger.info(this.initExecutionContext, "Stopping Web Server...");
 		}
 		await new Promise<void>((destroyResolve) => {
 			server.close((e) => {
 				if (e) {
 					const ex: FException = FException.wrapIfNeeded(e);
-					logger.warn(`The Web Server was stopped with error: ${ex.message}`);
-					logger.debug("The Web Server was stopped with error", ex);
+					logger.warn(this.initExecutionContext, `The Web Server was stopped with error: ${ex.message}`);
+					logger.debug(this.initExecutionContext, "The Web Server was stopped with error", ex);
 				} else {
-					logger.info("The Web Server was stopped");
+					logger.info(this.initExecutionContext, "The Web Server was stopped");
 				}
 				destroyResolve();
 			});
@@ -409,51 +418,51 @@ export class SecuredWebServer extends FAbstractWebServer<FHostingConfiguration.S
 	public get underlyingServer(): https.Server { return this._httpsServer; }
 
 	protected onListen(): Promise<void> {
-		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
-		logger.debug("SecuredWebServer#listen()");
-		const opts: FHostingConfiguration.SecuredWebServer = this._opts;
+		const logger: FLogger = this._log;
+		logger.debug(this.initExecutionContext, "SecuredWebServer#listen()");
+
 		const server: https.Server = this._httpsServer;
 		return new Promise((resolve, reject) => {
-			logger.info("Starting Web Server...");
+			logger.info(this.initExecutionContext, "Starting Web Server...");
 			server
 				.on("listening", () => {
 					const address = server.address();
 					if (address !== null) {
 						if (typeof address === "string") {
-							logger.info(`Web Server was started on ${address}`);
+							logger.info(this.initExecutionContext, `Web Server was started on ${address}`);
 						} else {
-							logger.info(address.family + " Web Server was started on https://" + address.address + ":" + address.port);
+							logger.info(this.initExecutionContext, address.family + " Web Server was started on https://" + address.address + ":" + address.port);
 						}
 					}
 					resolve();
 				})
 				.on("error", reject)
-				.listen(opts.listenPort, opts.listenHost);
+				.listen(this._listenPort, this._listenHost);
 		});
 	}
 
 	protected async onDispose() {
-		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
-		logger.debug("SecuredWebServer#onDispose()");
+		const logger: FLogger = this._log;
+		logger.debug(this.initExecutionContext, "SecuredWebServer#onDispose()");
 		const server = this._httpsServer;
 		const address = server.address();
 		if (address !== null) {
 			if (typeof address === "string") {
-				logger.info("Stopping Web Server https://" + address + "...");
+				logger.info(this.initExecutionContext, "Stopping Web Server https://" + address + "...");
 			} else {
-				logger.info("Stopping " + address.family + " Web Server https://" + address.address + ":" + address.port + "...");
+				logger.info(this.initExecutionContext, "Stopping " + address.family + " Web Server https://" + address.address + ":" + address.port + "...");
 			}
 		} else {
-			logger.info("Stopping Web Server...");
+			logger.info(this.initExecutionContext, "Stopping Web Server...");
 		}
 		await new Promise<void>((destroyResolve) => {
 			server.close((e) => {
 				if (e) {
 					const ex: FException = FException.wrapIfNeeded(e);
-					logger.warn(`The Web Server was stopped with error: ${ex.message}`);
-					logger.debug("The Web Server was stopped with error", ex);
+					logger.warn(this.initExecutionContext, `The Web Server was stopped with error: ${ex.message}`);
+					logger.debug(this.initExecutionContext, "The Web Server was stopped with error", ex);
 				} else {
-					logger.info("The Web Server was stopped");
+					logger.info(this.initExecutionContext, "The Web Server was stopped");
 				}
 				destroyResolve();
 			});
@@ -502,6 +511,7 @@ export abstract class FServersBindEndpoint extends FBindEndpoint {
 export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 	private readonly _webSocketServers: Array<WebSocket.Server>;
 	private readonly _connections: Set<WebSocket>;
+	private readonly _log: FLogger;
 	private _defaultProtocol: string;
 	private _allowedProtocols: Set<string>;
 	private _connectionCounter: number;
@@ -511,6 +521,7 @@ export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 		opts: FHostingConfiguration.WebSocketEndpoint
 	) {
 		super(servers, opts);
+		this._log = FLogger.create(this.constructor.name);
 		this._webSocketServers = [];
 		this._connections = new Set();
 		this._defaultProtocol = opts.defaultProtocol;
@@ -534,7 +545,7 @@ export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 	}
 
 	protected async onDispose() {
-		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
+		const logger: FLogger = this._log;
 
 		const connections = [...this._connections.values()];
 		this._connections.clear();
@@ -549,9 +560,9 @@ export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 				webSocketServer.close((err) => {
 					if (err !== undefined) {
 						if (logger.isWarnEnabled) {
-							logger.warn(`Web Socket Server was closed with error. Inner message: ${err.message} `);
+							logger.warn(this.initExecutionContext, `Web Socket Server was closed with error. Inner message: ${err.message} `);
 						}
-						logger.trace("Web Socket Server was closed with error.", FException.wrapIfNeeded(err));
+						logger.trace(this.initExecutionContext, "Web Socket Server was closed with error.", FException.wrapIfNeeded(err));
 					}
 
 					// dispose never raise any errors
@@ -569,22 +580,22 @@ export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 			return;
 		}
 
-		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
+		const logger: FLogger = this._log;
 
 		if (this._connectionCounter === Number.MAX_SAFE_INTEGER) { this._connectionCounter = 0; }
 		const connectionNumber: number = this._connectionCounter++;
 		const ipAddress: string | undefined = request.connection.remoteAddress;
 		if (ipAddress !== undefined && logger.isTraceEnabled) {
-			logger.trace(`Connection #${connectionNumber} was established from ${ipAddress} `);
+			logger.trace(this.initExecutionContext, `Connection #${connectionNumber} was established from ${ipAddress} `);
 		}
 		if (logger.isInfoEnabled) {
-			logger.info(`Connection #${connectionNumber} was established`);
+			logger.info(this.initExecutionContext, `Connection #${connectionNumber} was established`);
 		}
 
 		const subProtocol: string = webSocket.protocol || this._defaultProtocol;
 		if (webSocket.protocol !== undefined) {
 			if (!this._allowedProtocols.has(subProtocol)) {
-				logger.warn(`Connection #${connectionNumber} dropped. Not supported sub-protocol: ${subProtocol}`);
+				logger.warn(this.initExecutionContext, `Connection #${connectionNumber} dropped. Not supported sub-protocol: ${subProtocol}`);
 				// https://tools.ietf.org/html/rfc6455#section-7.4.1
 				webSocket.close(1007, `Wrong sub-protocol: ${subProtocol}`);
 				webSocket.terminate();
@@ -642,7 +653,7 @@ export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 				} else {
 					if (logger.isDebugEnabled) {
 						logger.debug(
-							`Connection #${connectionNumber} cannot handle a message due not supported type. Terminate socket...`
+							this.initExecutionContext, `Connection #${connectionNumber} cannot handle a message due not supported type. Terminate socket...`
 						);
 					}
 					// https://tools.ietf.org/html/rfc6455#section-7.4.1
@@ -654,20 +665,20 @@ export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 				if (logger.isInfoEnabled || logger.isTraceEnabled) {
 					const ex: FException = FException.wrapIfNeeded(e);
 					if (logger.isInfoEnabled) {
-						logger.info(`Connection #${connectionNumber} onMessage failed: ${ex.message}`);
+						logger.info(this.initExecutionContext, `Connection #${connectionNumber} onMessage failed: ${ex.message}`);
 					}
 					if (logger.isTraceEnabled) {
-						logger.trace(`Connection #${connectionNumber} onMessage failed:`, ex);
+						logger.trace(this.initExecutionContext, `Connection #${connectionNumber} onMessage failed:`, ex);
 					}
 				}
 			}
 		};
 		webSocket.onclose = ({ code, reason }) => {
 			if (logger.isTraceEnabled) {
-				logger.trace(`Connection #${connectionNumber} was closed: ${JSON.stringify({ code, reason })} `);
+				logger.trace(this.initExecutionContext, `Connection #${connectionNumber} was closed: ${JSON.stringify({ code, reason })} `);
 			}
 			if (logger.isInfoEnabled) {
-				logger.info(`Connection #${connectionNumber} was closed`);
+				logger.info(this.initExecutionContext, `Connection #${connectionNumber} was closed`);
 			}
 
 			FCancellationTokenSource.cancel();
@@ -717,8 +728,8 @@ export class FWebSocketChannelSupplyEndpoint extends FServersBindEndpoint {
 	}
 }
 export namespace FWebSocketChannelSupplyEndpoint {
-	export interface BinaryChannel extends FPublisherChannel<Uint8Array>, FSubscriberChannel<Uint8Array> { }
-	export interface TextChannel extends FPublisherChannel<string>, FSubscriberChannel<string> { }
+	export interface BinaryChannel extends FChannelPublisher<Uint8Array>, FChannelSubscriber<Uint8Array> { }
+	export interface TextChannel extends FChannelPublisher<string>, FChannelSubscriber<string> { }
 }
 
 /**
@@ -737,6 +748,7 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 	private readonly _connections: Set<WebSocket>;
 	private readonly _autoCreateChannelBinary: boolean;
 	private readonly _autoCreateChannelText: boolean;
+	private readonly _log: FLogger;
 	private _defaultProtocol: string;
 	private _allowedProtocols: Set<string>;
 	private _connectionCounter: number;
@@ -750,6 +762,7 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 		}
 	) {
 		super(servers, opts);
+		this._log = FLogger.create(this.constructor.name);
 		this._webSocketServers = [];
 		this._connections = new Set();
 		this._defaultProtocol = opts.defaultProtocol;
@@ -803,22 +816,22 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 			return;
 		}
 
-		const logger: FLoggerLegacy = FExecutionContextLoggerLegacy.of(this.initExecutionContext).logger;
+		const logger: FLogger = this._log;
 
 		if (this._connectionCounter === Number.MAX_SAFE_INTEGER) { this._connectionCounter = 0; }
 		const connectionNumber: number = this._connectionCounter++;
 		const ipAddress: string | undefined = request.connection.remoteAddress;
 		if (ipAddress !== undefined && logger.isTraceEnabled) {
-			logger.trace(`Connection #${connectionNumber} was established from ${ipAddress} `);
+			logger.trace(this.initExecutionContext, `Connection #${connectionNumber} was established from ${ipAddress} `);
 		}
 		if (logger.isInfoEnabled) {
-			logger.info(`Connection #${connectionNumber} was established`);
+			logger.info(this.initExecutionContext, `Connection #${connectionNumber} was established`);
 		}
 
 		const subProtocol: string = webSocket.protocol || this._defaultProtocol;
 		if (webSocket.protocol !== undefined) {
 			if (!this._allowedProtocols.has(subProtocol)) {
-				logger.warn(`Connection #${connectionNumber} dropped. Not supported sub-protocol: ${subProtocol}`);
+				logger.warn(this.initExecutionContext, `Connection #${connectionNumber} dropped. Not supported sub-protocol: ${subProtocol}`);
 				// https://tools.ietf.org/html/rfc6455#section-7.4.1
 				webSocket.close(1007, `Wrong sub-protocol: ${subProtocol}`);
 				webSocket.terminate();
@@ -828,8 +841,8 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 
 		const cancellationTokenSource: FCancellationTokenSourceManual = new FCancellationTokenSourceManual();
 
-		const executionContext: FExecutionContext = new FExecutionContextCancellation(
-			FExecutionContext.None,
+		const executionContext: FExecutionContext = new FCancellationExecutionContext(
+			FExecutionContext.Empty,
 			cancellationTokenSource.token
 		);
 
@@ -842,12 +855,12 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 
 		const handler = async (
 			executionContext: FExecutionContext,
-			event: FSubscriberChannel.Event<Uint8Array> | FSubscriberChannel.Event<string> | FException
+			event: FChannelSubscriber.Event<Uint8Array> | FChannelSubscriber.Event<string> | FException
 		) => {
 			if (event instanceof FException) {
 				// https://tools.ietf.org/html/rfc6455#section-7.4.1
-				logger.debug("Channel emits error. " + event.message);
-				logger.trace("Channel emits error.", event);
+				logger.debug(this.initExecutionContext, "Channel emits error. " + event.message);
+				logger.trace(this.initExecutionContext, "Channel emits error.", event);
 				webSocket.close(1011, event.message);
 				webSocket.terminate();
 			} else {
@@ -870,8 +883,8 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 			} catch (e) {
 				// https://tools.ietf.org/html/rfc6455#section-7.4.1
 				const friendlyError: FException = FException.wrapIfNeeded(e);
-				logger.debug(`Could not create binary channel. ${friendlyError.message}`);
-				logger.trace("Could not create binary channel.", friendlyError);
+				logger.debug(this.initExecutionContext, `Could not create binary channel. ${friendlyError.message}`);
+				logger.trace(this.initExecutionContext, "Could not create binary channel.", friendlyError);
 				webSocket.close(1011, friendlyError.message);
 				webSocket.terminate();
 				return;
@@ -892,8 +905,8 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 			} catch (e) {
 				// https://tools.ietf.org/html/rfc6455#section-7.4.1
 				const friendlyError: FException = FException.wrapIfNeeded(e);
-				logger.debug(`Could not create text channel. ${friendlyError.message}`);
-				logger.trace("Could not create text channel.", friendlyError);
+				logger.debug(this.initExecutionContext, `Could not create text channel. ${friendlyError.message}`);
+				logger.trace(this.initExecutionContext, "Could not create text channel.", friendlyError);
 				webSocket.close(1011, friendlyError.message);
 				webSocket.terminate();
 				return;
@@ -918,8 +931,8 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 						} catch (e) {
 							// https://tools.ietf.org/html/rfc6455#section-7.4.1
 							const friendlyError: FException = FException.wrapIfNeeded(e);
-							logger.debug(`Could not create binary channel. ${friendlyError.message}`);
-							logger.trace("Could not create binary channel.", friendlyError);
+							logger.debug(this.initExecutionContext, `Could not create binary channel. ${friendlyError.message}`);
+							logger.trace(this.initExecutionContext, "Could not create binary channel.", friendlyError);
 							webSocket.close(1011, friendlyError.message);
 							webSocket.terminate();
 							return;
@@ -936,8 +949,8 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 						} catch (e) {
 							// https://tools.ietf.org/html/rfc6455#section-7.4.1
 							const friendlyError: FException = FException.wrapIfNeeded(e);
-							logger.debug(`Could not create text channel. ${friendlyError.message}`);
-							logger.trace("Could not create text channel.", friendlyError);
+							logger.debug(this.initExecutionContext, `Could not create text channel. ${friendlyError.message}`);
+							logger.trace(this.initExecutionContext, "Could not create text channel.", friendlyError);
 							webSocket.close(1011, friendlyError.message);
 							webSocket.terminate();
 							return;
@@ -947,7 +960,7 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 				} else {
 					if (logger.isDebugEnabled) {
 						logger.debug(
-							`Connection #${connectionNumber} cannot handle a message due not supported type. Terminate socket...`
+							this.initExecutionContext, `Connection #${connectionNumber} cannot handle a message due not supported type. Terminate socket...`
 						);
 					}
 					// https://tools.ietf.org/html/rfc6455#section-7.4.1
@@ -958,19 +971,19 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 			} catch (e) {
 				const ex: FException = FException.wrapIfNeeded(e);
 				if (logger.isInfoEnabled) {
-					logger.info(`Connection #${connectionNumber} onMessage failed: ${ex.message}`);
+					logger.info(this.initExecutionContext, `Connection #${connectionNumber} onMessage failed: ${ex.message}`);
 				}
 				if (logger.isTraceEnabled) {
-					logger.trace(`Connection #${connectionNumber} onMessage failed:`, ex);
+					logger.trace(this.initExecutionContext, `Connection #${connectionNumber} onMessage failed:`, ex);
 				}
 			}
 		};
 		webSocket.onclose = ({ code, reason }) => {
 			if (logger.isTraceEnabled) {
-				logger.trace(`Connection #${connectionNumber} was closed: ${JSON.stringify({ code, reason })} `);
+				logger.trace(this.initExecutionContext, `Connection #${connectionNumber} was closed: ${JSON.stringify({ code, reason })} `);
 			}
 			if (logger.isInfoEnabled) {
-				logger.info(`Connection #${connectionNumber} was closed`);
+				logger.info(this.initExecutionContext, `Connection #${connectionNumber} was closed`);
 			}
 
 			cancellationTokenSource.cancel();
@@ -1023,8 +1036,8 @@ export class FWebSocketChannelFactoryEndpoint extends FServersBindEndpoint {
 	}
 }
 export namespace FWebSocketChannelFactoryEndpoint {
-	export interface BinaryChannel extends FDisposable, FPublisherChannel<Uint8Array>, FSubscriberChannel<Uint8Array> { }
-	export interface TextChannel extends FDisposable, FPublisherChannel<string>, FSubscriberChannel<string> { }
+	export interface BinaryChannel extends FDisposable, FChannelPublisher<Uint8Array>, FChannelSubscriber<Uint8Array> { }
+	export interface TextChannel extends FDisposable, FChannelPublisher<string>, FChannelSubscriber<string> { }
 }
 
 export function instanceofWebServer(server: any): server is FWebServer {
@@ -1092,7 +1105,7 @@ function parseCertificates(certificates: Buffer | string | Array<string | Buffer
 namespace _FWebSocketChannelSupplyEndpointHelpers {
 	export class WebSocketChannelBase<TData> {
 		protected readonly _webSocket: WebSocket;
-		protected readonly _callbacks: Array<FSubscriberChannel.Callback<TData>>;
+		protected readonly _callbacks: Array<FChannelSubscriber.Callback<TData>>;
 		protected _isBroken: boolean;
 
 		public constructor(webSocket: WebSocket) {
@@ -1152,11 +1165,11 @@ namespace _FWebSocketChannelSupplyEndpointHelpers {
 			}
 		}
 
-		public addHandler(cb: FSubscriberChannel.Callback<TData>): void {
+		public addHandler(cb: FChannelSubscriber.Callback<TData>): void {
 			this._callbacks.push(cb);
 		}
 
-		public removeHandler(cb: FSubscriberChannel.Callback<TData>): void {
+		public removeHandler(cb: FChannelSubscriber.Callback<TData>): void {
 			const index = this._callbacks.indexOf(cb);
 			if (index !== -1) {
 				this._callbacks.splice(index, 1);

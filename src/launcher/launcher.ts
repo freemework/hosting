@@ -1,21 +1,23 @@
 import {
 	FException,
-	FConfigurationLegacy,
+	FConfiguration,
+	FConfigurationChain,
 	FExecutionContext,
 	FCancellationTokenSource,
 	FCancellationTokenSourceManual,
-	FLoggerLegacy,
-	FExecutionContextLoggerLegacy,
-	FExecutionContextCancellation,
-	FExceptionCancelled
+	FLogger,
+	FCancellationException,
+	FCancellationExecutionContext,
 } from "@freemework/common";
 
 import { FLauncherException } from "./FLauncherException";
 
 import {
-	fileConfiguration, tomlFileConfiguration,
-	chainConfiguration, envConfiguration,
-	secretsDirectoryConfiguration
+	FConfigurationCommandLine,
+	FConfigurationDirectory,
+	FConfigurationEnv,
+	FConfigurationProperties,
+	FConfigurationToml
 } from "../configuration";
 
 export function Flauncher(runtimeFactory: FConfigLessRuntimeFactory): void;
@@ -43,22 +45,20 @@ export function Flauncher<TConfiguration>(
 ): void;
 
 export function Flauncher<TConfiguration>(...args: Array<any>): void {
-	const log: FLoggerLegacy = FLoggerLegacy.Console;
+	const log: FLogger = FLogger.create("App");
+
+	const cancellationTokenSource: FCancellationTokenSource = new FCancellationTokenSourceManual();
+	const executionContext: FExecutionContext = new FCancellationExecutionContext(
+		FExecutionContext.Empty,
+		cancellationTokenSource.token
+	);
 
 	async function run() {
-		const cancellationTokenSource: FCancellationTokenSource = new FCancellationTokenSourceManual();
-		const executionContext: FExecutionContext = new FExecutionContextLoggerLegacy(
-			new FExecutionContextCancellation(
-				FExecutionContext.Empty,
-				cancellationTokenSource.token
-			),
-			log
-		);
 
 		process.on("unhandledRejection", e => {
 			const ex: FException = FException.wrapIfNeeded(e);
-			log.debug("Unhandled Rejection", ex);
-			log.fatal(`Unhandled Rejection. ${ex.constructor.name}: ${ex.message}`);
+			log.debug(executionContext, "Unhandled Rejection", ex);
+			log.fatal(executionContext, `Unhandled Rejection. ${ex.constructor.name}: ${ex.message}`);
 			fireShutdownHooks().finally(function () {
 				process.exit(255);
 			});
@@ -97,7 +97,7 @@ export function Flauncher<TConfiguration>(...args: Array<any>): void {
 			if (runtimeStuff.parser === null) {
 				runtime = await runtimeStuff.runtimeFactory(executionContext);
 			} else {
-				const rawConfiguration: FConfigurationLegacy = await runtimeStuff.loader(executionContext);
+				const rawConfiguration: FConfiguration = await runtimeStuff.loader(executionContext);
 				const parsedConfiguration: TConfiguration = runtimeStuff.parser(rawConfiguration);
 				runtime = await runtimeStuff.runtimeFactory(executionContext, parsedConfiguration);
 			}
@@ -106,20 +106,20 @@ export function Flauncher<TConfiguration>(...args: Array<any>): void {
 
 		} catch (e) {
 			const ex: FException = FException.wrapIfNeeded(e);
-			if (ex instanceof FExceptionCancelled) {
-				log.warn("Runtime initialization was cancelled by user");
+			if (ex instanceof FCancellationException) {
+				log.warn(executionContext, "Runtime initialization was cancelled by user");
 				fireShutdownHooks().finally(function () {
 					process.exit(0);
 				});
 			}
 			if (log.isFatalEnabled) {
 				if (e instanceof Error) {
-					log.fatal(`Runtime initialization failed with ${e.constructor.name}: ${e.message}`);
+					log.fatal(executionContext, `Runtime initialization failed with ${e.constructor.name}: ${e.message}`);
 				} else {
-					log.fatal(`Runtime initialization failed with error: ${e}`);
+					log.fatal(executionContext, `Runtime initialization failed with error: ${e}`);
 				}
 			}
-			log.debug("Runtime initialization failed", ex);
+			log.debug(executionContext, "Runtime initialization failed", ex);
 			fireShutdownHooks().finally(function () {
 				process.exit(127);
 			});
@@ -130,34 +130,34 @@ export function Flauncher<TConfiguration>(...args: Array<any>): void {
 				cancellationTokenSource.cancel();
 
 				if (log.isInfoEnabled) {
-					log.info(`Interrupt signal received: ${signal}`);
+					log.info(executionContext, `Interrupt signal received: ${signal}`);
 				}
 				await runtime.destroy();
 				await fireShutdownHooks();
 				process.exit(0);
 			} else {
 				if (log.isInfoEnabled) {
-					log.info(`Interrupt signal (${destroyRequestCount}) received: ${signal}`);
+					log.info(executionContext, `Interrupt signal (${destroyRequestCount}) received: ${signal}`);
 				}
 			}
 		}
 	}
 
-	log.info("Starting application...");
+	log.info(executionContext, "Starting application...");
 	run()
 		.then(() => {
 			if (log.isInfoEnabled) {
-				log.info(`Application was started. Process ID: ${process.pid}`);
+				log.info(executionContext, `Application was started. Process ID: ${process.pid}`);
 			}
 		})
 		.catch(e => {
 			const ex: FException = FException.wrapIfNeeded(e);
 			if (log.isFatalEnabled) {
 				if (ex instanceof FLauncherException) {
-					log.fatal(`Cannot launch the application due an ${e.constructor.name}: ${e.message}`);
+					log.fatal(executionContext, `Cannot launch the application due an ${e.constructor.name}: ${e.message}`);
 				} else {
-					log.fatal(ex.message);
-					log.debug(ex.message, ex);
+					log.fatal(executionContext, ex.message);
+					log.debug(executionContext, ex.message, ex);
 				}
 			}
 			if (process.env.NODE_ENV === "development") {
@@ -178,29 +178,29 @@ export interface FLauncherRuntime {
 	destroy(): Promise<void>;
 }
 
-export type RawConfigurationLoader = (executionContext: FExecutionContext) => Promise<FConfigurationLegacy>;
-export type ConfigurationParser<TConfiguration> = (rawConfiguration: FConfigurationLegacy) => TConfiguration;
+export type RawConfigurationLoader = (executionContext: FExecutionContext) => Promise<FConfiguration>;
+export type ConfigurationParser<TConfiguration> = (rawConfiguration: FConfiguration) => TConfiguration;
 
 export type FLauncherRuntimeFactory<TConfiguration> = (executionContext: FExecutionContext, configuration: TConfiguration) => Promise<FLauncherRuntime>;
 export type FConfigLessRuntimeFactory = (executionContext: FExecutionContext) => Promise<FLauncherRuntime>;
 
-export async function defaultConfigurationLoader(executionContext: FExecutionContext): Promise<FConfigurationLegacy> {
-	const chainItems: Array<FConfigurationLegacy> = [];
+export async function defaultConfigurationLoader(executionContext: FExecutionContext): Promise<FConfiguration> {
+	const chainItems: Array<FConfiguration> = [];
 	for (const arg of process.argv) {
 		if (arg.startsWith(defaultConfigurationLoader.CONFIG_FILE_ARG)) {
 			const configFile = arg.substring(defaultConfigurationLoader.CONFIG_FILE_ARG.length);
-			const fileConf: FConfigurationLegacy = await fileConfiguration(configFile);
+			const fileConf: FConfiguration = await FConfigurationProperties.fromFile(configFile);
 			chainItems.push(fileConf);
 		} else if (arg.startsWith(defaultConfigurationLoader.CONFIG_TOML_FILE_ARG)) {
 			const configFile = arg.substring(defaultConfigurationLoader.CONFIG_TOML_FILE_ARG.length);
-			const fileConf: FConfigurationLegacy = await tomlFileConfiguration(configFile);
+			const fileConf: FConfiguration = await FConfigurationToml.fromFile(configFile);
 			chainItems.push(fileConf);
 		} else if (arg.startsWith(defaultConfigurationLoader.CONFIG_SECRET_DIR_ARG)) {
 			const secretsDir = arg.substring(defaultConfigurationLoader.CONFIG_SECRET_DIR_ARG.length);
-			const secretsConfiguration = await secretsDirectoryConfiguration(secretsDir);
+			const secretsConfiguration = await FConfigurationDirectory.read(secretsDir);
 			chainItems.push(secretsConfiguration);
 		} else if (arg === defaultConfigurationLoader.CONFIG_ENV_ARG) {
-			const envConf = envConfiguration();
+			const envConf = new FConfigurationEnv();
 			chainItems.push(envConf);
 		}
 	}
@@ -213,7 +213,7 @@ export async function defaultConfigurationLoader(executionContext: FExecutionCon
 	}
 
 	chainItems.reverse();
-	const rawConfiguration: FConfigurationLegacy = chainConfiguration(...chainItems);
+	const rawConfiguration: FConfiguration = new FConfigurationChain(...chainItems);
 
 	return rawConfiguration;
 }
@@ -231,8 +231,8 @@ export function registerShutdownHook(cb: () => Promise<void>): void {
 const shutdownHooks: Array<() => Promise<void>> = [];
 async function fireShutdownHooks(): Promise<void> {
 	if (shutdownHooks.length > 0) {
-		const log = FLoggerLegacy.Console.getLogger("launcher.fireShutdownHooks");
-		log.debug("Executing shutdown hooks...");
+		const log = FLogger.Console.getLogger("launcher.fireShutdownHooks");
+		log.debug({}, "Executing shutdown hooks...");
 		const shutdownHooksCopy = [...shutdownHooks];
 		do {
 			const cb: () => Promise<void> = shutdownHooksCopy.pop()!;
@@ -240,8 +240,8 @@ async function fireShutdownHooks(): Promise<void> {
 				await cb();
 			} catch (e) {
 				const ex: FException = FException.wrapIfNeeded(e);
-				log.warn(`An shutdown hook was finished with error: ${ex.message}`);
-				log.debug("An shutdown hook was finished with error", ex);
+				log.warn({}, `An shutdown hook was finished with error: ${ex.message}`);
+				log.debug({}, "An shutdown hook was finished with error", ex);
 			}
 		} while (shutdownHooksCopy.length > 0);
 	}

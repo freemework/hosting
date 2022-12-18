@@ -1,4 +1,4 @@
-import { FCancellationToken, FException, FExceptionCancelled } from "@freemework/common";
+import { FCancellationToken, FException, FCancellationException } from "@freemework/common";
 
 import * as http from "http";
 
@@ -15,7 +15,7 @@ export class FHttpRequestCancellationToken implements FCancellationToken {
 		// According to https://nodejs.org/api/http.html
 		// v16.0.0	The close event is now emitted when the request has been completed and not when the underlying socket is closed.
 		//
-		// So We switch to listen "close" event on underlaying socket
+		// So We switch to listen "close" event on underlying socket
 		this._request.socket.on("close", this._onClientDisconnectBound);
 		// this._request.on("end", this._onClientDisconnectBound);
 	}
@@ -35,7 +35,7 @@ export class FHttpRequestCancellationToken implements FCancellationToken {
 
 	public throwIfCancellationRequested(): void {
 		if (this.isCancellationRequested) {
-			throw new FExceptionCancelled();
+			throw new FCancellationException();
 		}
 	}
 

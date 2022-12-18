@@ -1,15 +1,15 @@
-import { FConfigurationLegacy } from "@freemework/common";
+import { FConfiguration } from "@freemework/common";
 import { assert } from "chai";
 
 import * as path from "path";
 import * as fs from "fs";
 import * as tmp from "tmp";
 
-import * as THE from "../../src";
+import { FConfigurationDirectory } from "../../src";
 
-describe("secretsDirectoryConfiguration tests", function () {
+describe("FConfigurationDirectory tests", function () {
 	let tempDirectoryObj: tmp.DirResult;
-	let configuration: FConfigurationLegacy;
+	let configuration: FConfiguration;
 	before(async () => {
 		// runs before all tests in this block
 		tempDirectoryObj = tmp.dirSync({ unsafeCleanup: true });
@@ -21,14 +21,14 @@ describe("secretsDirectoryConfiguration tests", function () {
 			path.join(tempDirectoryObj.name, "config.db.port"),
 			"5432"
 		);
-		configuration = await THE.secretsDirectoryConfiguration(tempDirectoryObj.name);
+		configuration = await FConfigurationDirectory.read(tempDirectoryObj.name);
 	});
 	after(() => {
 		tempDirectoryObj.removeCallback();
 	});
 
 	it("Generic test", function() {
-		assert.equal(configuration.getString("config.db.host"), "localhost");
-		assert.equal(configuration.getInteger("config.db.port"), 5432);
+		assert.equal(configuration.get("config.db.host").asString, "localhost");
+		assert.equal(configuration.get("config.db.port").asIntegerPositive, 5432);
 	});
 });

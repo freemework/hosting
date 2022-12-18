@@ -1,0 +1,15 @@
+[a]
+
+	"b.indexes" = "index0 index2"
+
+	[[a.b]]
+		index = "index0"
+		c = 40
+
+	[[a.b]]
+		index = "index1"
+		c = 41
+
+	[[a.b]]
+		index = "index2"
+		c = 42

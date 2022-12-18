@@ -1,4 +1,4 @@
-import { FDisposable, FDisposableBase, FExecutionContext, FPublisherChannel, FSubscriberChannel } from "@freemework/common";
+import { FDisposable, FDisposableBase, FExecutionContext, FChannelPublisher, FChannelSubscriber } from "@freemework/common";
 import * as http from "http";
 import { FHostingConfiguration } from "../src/FHostingConfiguration";
 
@@ -122,9 +122,9 @@ rOgEbvrU9VHU1UkWSoCXefFQyw==
 let server1: THE.SecuredWebServer;
 let server2: THE.UnsecuredWebServer;
 
-class TimerSubscriberChannel extends FDisposableBase implements FSubscriberChannel<Date> {
+class TimerSubscriberChannel extends FDisposableBase implements FChannelSubscriber<Date> {
 	private readonly _timeout: number;
-	private readonly _handlers: Set<FSubscriberChannel.Callback<Date, FSubscriberChannel.Event<Date>>>;
+	private readonly _handlers: Set<FChannelSubscriber.Callback<Date, FChannelSubscriber.Event<Date>>>;
 	private _timer?: NodeJS.Timeout;
 
 	public constructor(timeout: number) {
@@ -133,13 +133,13 @@ class TimerSubscriberChannel extends FDisposableBase implements FSubscriberChann
 		this._handlers = new Set();
 	}
 
-	public addHandler(cb: FSubscriberChannel.Callback<Date, FSubscriberChannel.Event<Date>>): void {
+	public addHandler(cb: FChannelSubscriber.Callback<Date, FChannelSubscriber.Event<Date>>): void {
 		if (this._timer === undefined) {
 			this._timer = setInterval(this.onTimer.bind(this), this._timeout);
 		}
 		this._handlers.add(cb);
 	}
-	public removeHandler(cb: FSubscriberChannel.Callback<Date, FSubscriberChannel.Event<Date>>): void {
+	public removeHandler(cb: FChannelSubscriber.Callback<Date, FChannelSubscriber.Event<Date>>): void {
 		this._handlers.delete(cb);
 		if (this._timer !== undefined) {
 			clearInterval(this._timer);
@@ -180,11 +180,11 @@ class MyRestEndpoint extends THE.FServersBindEndpoint {
 
 class SubscriberHandle {
 	private readonly _timerSubscriberChannel: TimerSubscriberChannel;
-	private readonly _publisherChannel: FPublisherChannel<string>;
-	private readonly _event: FSubscriberChannel.Callback<Date, FSubscriberChannel.Event<Date>>;
+	private readonly _publisherChannel: FChannelPublisher<string>;
+	private readonly _event: FChannelSubscriber.Callback<Date, FChannelSubscriber.Event<Date>>;
 	private readonly _token: string;
 
-	public constructor(timerSubscriberChannel: TimerSubscriberChannel, publisherChannel: FPublisherChannel<string>) {
+	public constructor(timerSubscriberChannel: TimerSubscriberChannel, publisherChannel: FChannelPublisher<string>) {
 		this._timerSubscriberChannel = timerSubscriberChannel;
 		this._publisherChannel = publisherChannel;
 		this._event = this.onEvent.bind(this);
@@ -199,7 +199,7 @@ class SubscriberHandle {
 		this._timerSubscriberChannel.removeHandler(this._event);
 	}
 
-	private async onEvent(executionContext: FExecutionContext, ev: FSubscriberChannel.Event<Date> | Error): Promise<void> {
+	private async onEvent(executionContext: FExecutionContext, ev: FChannelSubscriber.Event<Date> | Error): Promise<void> {
 		if (ev instanceof Error) {
 			this._publisherChannel.send(executionContext, `[${this._token}] Failed: ${ev.message}`);
 			return;

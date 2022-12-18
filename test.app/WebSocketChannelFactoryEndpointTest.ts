@@ -1,4 +1,4 @@
-import { FDisposableBase, FExecutionContext, FSubscriberChannel } from "@freemework/common";
+import { FDisposableBase, FExecutionContext, FChannelSubscriber } from "@freemework/common";
 import * as _ from "lodash";
 import * as WebSocket from "ws";
 
@@ -6,7 +6,7 @@ import * as THE from "../src/index";
 
 class BinaryEchoChannel extends FDisposableBase implements THE.FWebSocketChannelSupplyEndpoint.BinaryChannel {
 	private readonly _timeout: number;
-	private readonly _handlers: Set<FSubscriberChannel.Callback<Uint8Array>>;
+	private readonly _handlers: Set<FChannelSubscriber.Callback<Uint8Array>>;
 	private readonly _subProtocol: string;
 	private _timer?: NodeJS.Timeout;
 	private _echoMessage: string;
@@ -37,11 +37,11 @@ class BinaryEchoChannel extends FDisposableBase implements THE.FWebSocketChannel
 		}
 	}
 
-	public addHandler(cb: FSubscriberChannel.Callback<Uint8Array>): void {
+	public addHandler(cb: FChannelSubscriber.Callback<Uint8Array>): void {
 		this._handlers.add(cb);
 	}
 
-	public removeHandler(cb: FSubscriberChannel.Callback<Uint8Array>): void {
+	public removeHandler(cb: FChannelSubscriber.Callback<Uint8Array>): void {
 		this._handlers.delete(cb);
 	}
 
@@ -68,7 +68,7 @@ class BinaryEchoChannel extends FDisposableBase implements THE.FWebSocketChannel
 }
 class TextEchoChannel extends FDisposableBase implements THE.FWebSocketChannelSupplyEndpoint.TextChannel {
 	private readonly _timeout: number;
-	private readonly _handlers: Set<FSubscriberChannel.Callback<string>>;
+	private readonly _handlers: Set<FChannelSubscriber.Callback<string>>;
 	private readonly _subProtocol: string;
 	private _timer?: NodeJS.Timeout;
 	private _echoMessage: string;
@@ -99,11 +99,11 @@ class TextEchoChannel extends FDisposableBase implements THE.FWebSocketChannelSu
 		}
 	}
 
-	public addHandler(cb: FSubscriberChannel.Callback<string>): void {
+	public addHandler(cb: FChannelSubscriber.Callback<string>): void {
 		this._handlers.add(cb);
 	}
 
-	public removeHandler(cb: FSubscriberChannel.Callback<string>): void {
+	public removeHandler(cb: FChannelSubscriber.Callback<string>): void {
 		this._handlers.delete(cb);
 	}
 

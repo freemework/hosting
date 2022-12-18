@@ -1,21 +1,21 @@
-import { FConfigurationLegacy } from "@freemework/common";
+import { FConfiguration, FConfigurationChain } from "@freemework/common";
 
 import { assert } from "chai";
 
-import { ConfigurationImpl, chainConfiguration } from "../../src";
+import {  } from "../../src";
 
 describe("Regression tests", function () {
 	it("Method key() should works for sub-configuration (bug in 6.0.23)", function () {
-		const config1: FConfigurationLegacy = new ConfigurationImpl({
+		const config1: FConfiguration = FConfiguration.factoryJson({
 			"a.b1": "b1value",
 			"a.b2": "b2value"
 		});
-		const config2: FConfigurationLegacy = new ConfigurationImpl({
+		const config2: FConfiguration = FConfiguration.factoryJson({
 			"a.b1": "b1valueOverride",
 			"a.b3": "b3value"
 		});
 
-		const config = chainConfiguration(config2, config1);
+		const config = new FConfigurationChain(config2, config1);
 
 		{ // Root keys
 			const keys = [...config.keys];
@@ -39,19 +39,19 @@ describe("Regression tests", function () {
 	});
 
 	it("Method getURL() should raise error with full key name for sub-configuration (bug in 6.0.36)", function () {
-		const config1: FConfigurationLegacy = new ConfigurationImpl({
+		const config1: FConfiguration = FConfiguration.factoryJson({
 			"a.url": "http://localhost:9090"
 		});
-		const config2: FConfigurationLegacy = new ConfigurationImpl({
+		const config2: FConfiguration = FConfiguration.factoryJson({
 			"a.url": "http://localhost:8080"
 		});
 
-		const config = chainConfiguration(config2, config1);
+		const config = new FConfigurationChain(config2, config1);
 		const subConfig = config.getNamespace("a");
 
 		let expectedError;
 		try {
-			subConfig.getURL("wrongKey");
+			subConfig.get("wrongKey").asUrl;
 		} catch (e) {
 			expectedError = e;
 		}
@@ -63,14 +63,14 @@ describe("Regression tests", function () {
 	});
 
 	it("6.0.40: Ability to mask namespace in chain configuration", function () {
-		const config1: FConfigurationLegacy = new ConfigurationImpl({
+		const config1: FConfiguration = FConfiguration.factoryJson({
 			"a.ssl.ca": "/path/to/ca.crt"
 		});
-		const config2: FConfigurationLegacy = new ConfigurationImpl({
+		const config2: FConfiguration = FConfiguration.factoryJson({
 			"a.ssl": "" // Mask namespace "a.ssl"
 		});
 
-		const config = chainConfiguration(config2, config1);
+		const config = new FConfigurationChain(config2, config1);
 		assert.isFalse(config.hasNamespace("a.ssl"), "Namespace should be removed by empty value assingment");
 	});
 });
