@@ -45,7 +45,7 @@ export function Flauncher<TConfiguration>(
 ): void;
 
 export function Flauncher<TConfiguration>(...args: Array<any>): void {
-	const log: FLogger = FLogger.create("App");
+	const log: FLogger = FLogger.create("Flauncher");
 
 	const cancellationTokenSource: FCancellationTokenSource = new FCancellationTokenSourceManual();
 	const executionContext: FExecutionContext = new FCancellationExecutionContext(
@@ -231,7 +231,7 @@ export function registerShutdownHook(cb: () => Promise<void>): void {
 const shutdownHooks: Array<() => Promise<void>> = [];
 async function fireShutdownHooks(): Promise<void> {
 	if (shutdownHooks.length > 0) {
-		const log = FLogger.Console.getLogger("launcher.fireShutdownHooks");
+		const log = FLogger.create("Flauncher.fireShutdownHooks");
 		log.debug({}, "Executing shutdown hooks...");
 		const shutdownHooksCopy = [...shutdownHooks];
 		do {

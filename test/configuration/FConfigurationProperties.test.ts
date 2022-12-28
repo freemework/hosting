@@ -135,7 +135,7 @@ describe("Checks all methods with type", function () {
 			"int = 12345\r\n" +
 			"intMinus = -12345\r\n" +
 			"intZero = 0\r\n" +
-			"intBig = 123456789123456789123456789\r\n" +
+			"intMaxSafe = 9007199254740991\r\n" +
 			"string = string-hello-world\r\n" +
 			"emptyString = \r\n" +
 			"booleanTrue = true\r\n" +
@@ -169,8 +169,8 @@ describe("Checks all methods with type", function () {
 	it("Should be return intZero", function () {
 		assert.equal(config.get("intZero").asInteger, 0);
 	});
-	it.skip("Should be return intBig", function () {
-		assert.equal(config.get("intBig").asInteger, 123456789123456789123456789);
+	it("Should be return intMaxSafe", function () {
+		assert.equal(config.get("intMaxSafe").asInteger, Number.MAX_SAFE_INTEGER);
 	});
 	it("Should be return string", function () {
 		assert.equal(config.get("string").asString, "string-hello-world");

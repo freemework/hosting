@@ -92,7 +92,7 @@ desc = "desc3"
 	});
 
 
-	it.skip("getIndexer with named index", function () {
+	it("getArray with named index", function () {
 		const config = FConfigurationToml.factory(`
 [setup]
 
