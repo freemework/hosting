@@ -232,7 +232,7 @@ const shutdownHooks: Array<() => Promise<void>> = [];
 async function fireShutdownHooks(): Promise<void> {
 	if (shutdownHooks.length > 0) {
 		const log = FLogger.create("Flauncher.fireShutdownHooks");
-		log.debug({}, "Executing shutdown hooks...");
+		log.debug(FExecutionContext.Empty, "Executing shutdown hooks...");
 		const shutdownHooksCopy = [...shutdownHooks];
 		do {
 			const cb: () => Promise<void> = shutdownHooksCopy.pop()!;
@@ -240,8 +240,8 @@ async function fireShutdownHooks(): Promise<void> {
 				await cb();
 			} catch (e) {
 				const ex: FException = FException.wrapIfNeeded(e);
-				log.warn({}, `An shutdown hook was finished with error: ${ex.message}`);
-				log.debug({}, "An shutdown hook was finished with error", ex);
+				log.warn(FExecutionContext.Empty, `An shutdown hook was finished with error: ${ex.message}`);
+				log.debug(FExecutionContext.Empty, "An shutdown hook was finished with error", ex);
 			}
 		} while (shutdownHooksCopy.length > 0);
 	}

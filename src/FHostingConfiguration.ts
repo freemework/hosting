@@ -202,7 +202,7 @@ export namespace FHostingConfiguration {
 	}
 
 	export function parseWebServers(configuration: FConfiguration): Array<FHostingConfiguration.WebServer> {
-		const serverConfigurations: Array<FConfiguration> = configuration.getArray("servers");
+		const serverConfigurations: Array<FConfiguration> = configuration.getArray("server");
 		const servers: Array<FHostingConfiguration.WebServer> = serverConfigurations.map(serverConfiguration => {
 			let serverName: string = "Unnamed";
 			const { configurationNamespace } = serverConfiguration;

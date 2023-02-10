@@ -1103,7 +1103,7 @@ function parseCertificates(certificates: Buffer | string | Array<string | Buffer
 }
 
 namespace _FWebSocketChannelSupplyEndpointHelpers {
-	export class WebSocketChannelBase<TData> {
+	export class WebSocketChannelBase<TData extends Parameters<WebSocket.WebSocket["send"]>[0]> {
 		protected readonly _webSocket: WebSocket;
 		protected readonly _callbacks: Array<FChannelSubscriber.Callback<TData>>;
 		protected _isBroken: boolean;
